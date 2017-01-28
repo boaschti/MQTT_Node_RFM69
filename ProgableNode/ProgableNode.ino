@@ -339,9 +339,10 @@ void setup()
 		}
 	}
 	
+	//Es wird geprueft ob die Nachricht ueberhaupt in den Buffer passt ansonsten senden wir eine Fehlermeldung
 	if ((nameLength + wertLength + messageOverhead) <= RF69_MAX_DATA_LEN)
 	{
-		
+		//Wir pruefen ob die Nachricht zusaetlich in den Buffer passt ansonsten schicken wir zuerst alle Daten weg
 		if ((nameLength + wertLength + sendBufferPointer + messageOverhead) > RF69_MAX_DATA_LEN)
 		{
 			if (rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer)){
@@ -383,6 +384,7 @@ void setup()
 		const char errorString[] = "\"err\":\"Message to long\"";
 		rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
 	}
+	
 	sendBufferLength = sendBufferPointer;
 	return 1;
 }
