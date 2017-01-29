@@ -43,8 +43,7 @@ Modifications Needed:
 
 
 
-char sendBuffer[RF69_MAX_DATA_LEN] ;
-uint8_t sendBufferLength;
+
 RFM69 rfm69;
 
 //end Basic Defines ---------------------------------------------------------------------------------------------------
@@ -331,28 +330,28 @@ void setup()
 	}
 }
 
- boolean write_buffer_str(char *name, void* wert, boolean resetBuffer = FALSE)
+ boolean write_buffer_str(char *name, void* wert)
 {
+	/*
+	write_buffer_str("abc","def") -> Es wird ein String ""abc":"def"" in den Buffer geschrieben
+	write_buffer_str("","") -> Es werden alle Daten gesendet und der Pointer auf 0 gesetzt
+	
+	Es wird immer ueberprueft ob die maxixmale laenge von 61Bytes (begrenzt vom RFM Modul) ueberschritten wird 
+	Es wird immer ueberprueft ob die neue Nachricht + messageOverhead noch Platz hat. Wenn nicht wird erst gesendet
+	*/
+	
 	#define messageOverhead 6
 	
+	static char sendBuffer[RF69_MAX_DATA_LEN];
 	static uint8_t sendBufferPointer = 0;	
 	uint8_t nameLength = strnlen(name, RF69_MAX_DATA_LEN);
 	uint8_t wertLength = strlen(wert);
-
-	//Wenn der Buffer resettet werden soll. Wenn der wert 0 Byte hat dann muss auch nichts in den Buffer geschrieben werden.
-	if (resetBuffer)
-	{
-		sendBufferPointer = 0;
-		if (wertLength == 0){
-			return 1;
-		}
-	}
 	
 	//Es wird geprueft ob die Nachricht ueberhaupt in den Buffer passt ansonsten senden wir eine Fehlermeldung
 	if ((nameLength + wertLength + messageOverhead) <= RF69_MAX_DATA_LEN)
 	{
 		//Wir pruefen ob die Nachricht zusaetlich in den Buffer passt ansonsten schicken wir zuerst alle Daten weg
-		//Wenn die wertLange 0 ist und Daten, die noch nicht gesendet worden sind vorliegen, dann wollen wir auch senden 
+		//Wenn die wertLange 0 ist, und Daten, die noch nicht gesendet worden sind vorliegen, dann wollen wir diese senden 
 		if (((nameLength + wertLength + sendBufferPointer + messageOverhead) > RF69_MAX_DATA_LEN) || ((wertLength == 0) && (sendBufferPointer > 0))){
 			if (!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer)){
 				//Wir konnten nicht senden-> wir warten und probieren es noch einmal
@@ -394,9 +393,9 @@ void setup()
 	{
 		const char errorString[] = "\"err\":\"Message to long\"";
 		rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
+		return FALSE;
 	}
 	
-	sendBufferLength = sendBufferPointer;
 	return TRUE;
 }
 
@@ -405,7 +404,7 @@ void sendInt(char *name, uint8_t wert){
 	char temp[5];
 	itoa(wert, temp, 10);
 	write_buffer_str(name, &temp[0]);
-	rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferLength);
+	write_buffer_str("",""); //sende DAten
 }
 
 boolean readMessage(char *message){
@@ -583,9 +582,9 @@ void testsend(void)
 		
 	int16_t test1 = 1876;
 	float test2 = 1.7551;
-	write_buffer_str("wert_1", "bla", TRUE);
-	write_buffer_str("wert_2", "testvariable_1_xxx_yyyy_", FALSE);
-	write_buffer_str("message", "message_m", FALSE);
+	write_buffer_str("wert_1", "bla");
+	write_buffer_str("wert_2", "testvariable_1_xxx_yyyy_");
+	write_buffer_str("message", "message_m");
 	//String Temp = String(test2,3);
 	//write_buffer_str("test1", &Temp[0], FALSE);
 	//write_buffer_str("test1", ltoa(test1, strlen(test1),10));
@@ -596,10 +595,9 @@ void testsend(void)
 		delay(10);
 		digitalWrite(LED_2, LOW);
 	}
-	write_buffer_str("wert_xy", "testabc", FALSE);
-	write_buffer_str("message", "message2_message2_message2_message2_message2_message2_message2_message2_message2_message2_message2", FALSE);
-	if(!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferLength))
-	{
+	write_buffer_str("wert_xy", "testabc");
+	write_buffer_str("message", "message2_message2_message2_message2_message2_message2_message2_message2_message2_message2_message2");
+	if(!write_buffer_str("","")){
 		digitalWrite(LED_2, HIGH);
 		delay(10);
 		digitalWrite(LED_2, LOW);
@@ -669,7 +667,7 @@ void read_DHT(boolean readImmediatelly = FALSE)
 	float temp_F;
 	if (isnan(t) || isnan(h)) {
 		write_buffer_str("err", "DHT_read");
-		rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferLength);
+		write_buffer_str("","");
 	} else {
 		char Temp[10];
 		//dtostrf(floatVar, minStringWidthIncDecimalPoint, numVarsAfterDecimal, charBuf);			
