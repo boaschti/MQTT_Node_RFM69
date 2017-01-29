@@ -1,13 +1,14 @@
 /*
-Author:  Eric Tsai
-License:  CC-BY-SA, https://creativecommons.org/licenses/by-sa/2.0/
-Date:  7-21-2014
-File: Mailbox.ino
-This sleeps until interrupted, then sends data via RFM69
-
+Author:  Sebastian Weisser
+Date 28.01.2017
 Modifications Needed:
 1)  Update encryption string "ENCRYPTKEY"
-2)  
+2)  Frequency setting
+3)	Pubsubclient replace #define MQTT_MAX_PACKET_SIZE 256
+4)	Adafruit_BME280.cpp replace "if (read8(BME280_REGISTER_CHIPID) != 0x60)" with "uint8_t chipId = read8(BME280_REGISTER_CHIPID); if ((chipId != 0x58) && (chipId != 0x60))"
+5)	RFM69.h replace   #define RF69_IRQ_PIN          3    #define RF69_IRQ_NUM          1
+
+
 */
 
 
@@ -316,13 +317,13 @@ void setup()
 	if (config[digitalSensors] & (1<<readBME)){
 		delay(1000);
 		if (!bme.begin()) {
-			const char errorString[] = "\"err\":\"BME!\"";
+			const char errorString[] = "\"err\":\"BME Init\"";
 			rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
 		}
 	}
 }
 
- boolean write_buffer_str(char *name, void* wert, boolean resetBuffer = false)
+ boolean write_buffer_str(char *name, void* wert, boolean resetBuffer = FALSE)
 {
 	#define messageOverhead 6
 	
@@ -343,41 +344,43 @@ void setup()
 	if ((nameLength + wertLength + messageOverhead) <= RF69_MAX_DATA_LEN)
 	{
 		//Wir pruefen ob die Nachricht zusaetlich in den Buffer passt ansonsten schicken wir zuerst alle Daten weg
-		if ((nameLength + wertLength + sendBufferPointer + messageOverhead) > RF69_MAX_DATA_LEN)
-		{
-			if (rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer)){
-				delay(millis()/150);
-				if (rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer)){
-					sendBufferPointer = 0;	
-				}else{
+		//Wenn die wertLange 0 ist und Daten, die noch nicht gesendet worden sind vorliegen, dann wollen wir auch senden 
+		if (((nameLength + wertLength + sendBufferPointer + messageOverhead) > RF69_MAX_DATA_LEN) || ((wertLength == 0) && (sendBufferPointer > 0))){
+			if (!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer)){
+				//Wir konnten nicht senden-> wir warten und probieren es noch einmal
+				delay(config[nodeId]*1.3);
+				if (!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer)){
 					//Ein Fehler ist aufgetreten wir merken uns den Bufferinhalt
-					return 0;
+					return FALSE;
+				}else{
+					sendBufferPointer = 0;
 				}
 			}else{
-				//Ein Fehler ist aufgetreten wir merken uns den Bufferinhalt
-				return 0;
+				sendBufferPointer = 0;
 			}
 		}
+		// WIr wollen nur in den Puffer schreiben wenn auch ein Wert uebergeben wurde
+		if (wertLength != 0){
+			sendBuffer[sendBufferPointer++] = '\"';
 
-		sendBuffer[sendBufferPointer++] = '\"';
+			for (uint8_t loop = 0; name[loop] != '\0'; loop++)
+			{
+				sendBuffer[sendBufferPointer++] = name[loop];
+			}
 
-		for (uint8_t loop = 0; name[loop] != '\0'; loop++)
-		{
-			sendBuffer[sendBufferPointer++] = name[loop];
+			sendBuffer[sendBufferPointer++] = '\"';
+			sendBuffer[sendBufferPointer++] = ':';
+			sendBuffer[sendBufferPointer++] = '\"';
+
+			for (uint8_t loop = 0; loop < wertLength; loop++)
+			{
+				sendBuffer[sendBufferPointer++] = ((char*)(wert))[loop];
+			}
+
+			sendBuffer[sendBufferPointer++] = '\"';
+			sendBuffer[sendBufferPointer++] = ',';
+			sendBuffer[sendBufferPointer] = '\0';
 		}
-
-		sendBuffer[sendBufferPointer++] = '\"';
-		sendBuffer[sendBufferPointer++] = ':';
-		sendBuffer[sendBufferPointer++] = '\"';
-
-		for (uint8_t loop = 0; loop < wertLength; loop++)
-		{
-			sendBuffer[sendBufferPointer++] = ((char*)(wert))[loop];
-		}
-
-		sendBuffer[sendBufferPointer++] = '\"';
-		sendBuffer[sendBufferPointer++] = ',';
-		sendBuffer[sendBufferPointer] = '\0';
 	}
 	else
 	{
@@ -386,14 +389,14 @@ void setup()
 	}
 	
 	sendBufferLength = sendBufferPointer;
-	return 1;
+	return TRUE;
 }
 
 void sendInt(char *name, uint8_t wert){
 	
 	char temp[5];
 	itoa(wert, temp, 10);
-	write_buffer_str(name, &temp[0], true);
+	write_buffer_str(name, &temp[0]);
 	rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferLength);
 }
 
@@ -444,24 +447,24 @@ boolean readMessage(char *message){
 	//parts[1]
 	// last part parts[i]
 	/*
-		write_buffer_str("part0", parts[0], true);
-		write_buffer_str("part1", parts[1], false);
-		write_buffer_str("part2", parts[2], false);
-		write_buffer_str("part3", parts[3], false);
-		write_buffer_str("part4", parts[4], false);
-		write_buffer_str("part5", parts[5], false);
-		write_buffer_str("part6", parts[6], false);
-		write_buffer_str("part7", parts[7], false);
-		write_buffer_str("part8", parts[8], false);
-		write_buffer_str("part9", parts[9], false);
+		write_buffer_str("part0", parts[0], TRUE);
+		write_buffer_str("part1", parts[1], FALSE);
+		write_buffer_str("part2", parts[2], FALSE);
+		write_buffer_str("part3", parts[3], FALSE);
+		write_buffer_str("part4", parts[4], FALSE);
+		write_buffer_str("part5", parts[5], FALSE);
+		write_buffer_str("part6", parts[6], FALSE);
+		write_buffer_str("part7", parts[7], FALSE);
+		write_buffer_str("part8", parts[8], FALSE);
+		write_buffer_str("part9", parts[9], FALSE);
 		rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferLength);
 		*/
 	uint8_t listLen = i;
-	boolean resetCPU = false;
+	boolean resetCPU = FALSE;
 	
 	for (uint8_t i=0; i<=listLen; i++){
 		/*
-		write_buffer_str("parse", parts[i], true);
+		write_buffer_str("parse", parts[i], TRUE);
 		rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferLength);
 		delay(100);
 		*/
@@ -474,10 +477,8 @@ boolean readMessage(char *message){
 			sendInt(temp, config[atoi(parts[i + 1])]);
 			i++;
 			i++;
-			//setupPins();
-			if (1){
-				resetCPU = true;
-			}
+			//Wir wollen in einem sauberen Zustand starten
+			resetCPU = TRUE;
 		}
 		//zum lesen der Config
 		if (strcmp(parts[i] , "r") == 0){
@@ -493,9 +494,10 @@ boolean readMessage(char *message){
 			}else{
 				digitalWrite(pinMapping[atoi(parts[i + 1])],0);
 			}
-			char temp[10] = "infoP";
-			strncat(temp, parts[i+1],2);
-			write_buffer_str(temp, parts[i + 2]);
+			//setze Bit "readInput" fuer den jeweiligen Port damit der Status zurueck gesendet wird
+			//char temp[10] = "infoP";
+			//strncat(temp, parts[i+1],2);
+			//write_buffer_str(temp, parts[i + 2]);
 			i++;
 			i++;
 		}
@@ -520,7 +522,7 @@ void radio_Rx_loop(void) {
 		
 		digitalWrite(LED_1, HIGH);
 		
-		//save packet because it may be overwritten
+		//speichern der Daten, da evt schon wieder weiter ankommen
 		senderId = rfm69.SENDERID;
 		rssi = rfm69.RSSI;
 		dataLen = rfm69.DATALEN;
@@ -559,25 +561,25 @@ void testsend(void)
 	strcat(string, ",");
 	
 	
-	//ltoa(rfm69.readRSSI(false), tempstring, 10);
+	//ltoa(rfm69.readRSSI(FALSE), tempstring, 10);
 	//strcat(string, tempstring);
 	//ultoa(deltaMillis, tempstring, 10);
 	//strcat(string, tempstring);
 	
 	ultoa(deltaMillis, string+strlen(string), 10);
 	strcat(string, ",");
-	ltoa(rfm69.readRSSI(false), string+strlen(string), 10); 
+	ltoa(rfm69.readRSSI(FALSE), string+strlen(string), 10); 
 */		
 		
 		
 		
 	int16_t test1 = 1876;
 	float test2 = 1.7551;
-	write_buffer_str("wert_1", "bla", true);
-	write_buffer_str("wert_2", "testvariable_1_xxx_yyyy_", false);
-	write_buffer_str("message", "message_m", false);
+	write_buffer_str("wert_1", "bla", TRUE);
+	write_buffer_str("wert_2", "testvariable_1_xxx_yyyy_", FALSE);
+	write_buffer_str("message", "message_m", FALSE);
 	//String Temp = String(test2,3);
-	//write_buffer_str("test1", &Temp[0], false);
+	//write_buffer_str("test1", &Temp[0], FALSE);
 	//write_buffer_str("test1", ltoa(test1, strlen(test1),10));
 	//if(!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferLength));
 	if(0)
@@ -586,8 +588,8 @@ void testsend(void)
 		delay(10);
 		digitalWrite(LED_2, LOW);
 	}
-	write_buffer_str("wert_xy", "testabc", false);
-	write_buffer_str("message", "message2_message2_message2_message2_message2_message2_message2_message2_message2_message2_message2", false);
+	write_buffer_str("wert_xy", "testabc", FALSE);
+	write_buffer_str("message", "message2_message2_message2_message2_message2_message2_message2_message2_message2_message2_message2", FALSE);
 	if(!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferLength))
 	{
 		digitalWrite(LED_2, HIGH);
@@ -615,6 +617,7 @@ void read_bme(void){
 	dtostrf(temp_F, 3, 1, Temp);
 	write_buffer_str("Ba", &Temp[0]);
 		
+	//Nur bei BME280 nicht bei BMP280
 	temp_F = bme.readHumidity();
 	//dtostrf(floatVar, minStringWidthIncDecimalPoint, numVarsAfterDecimal, charBuf);
 	dtostrf(temp_F, 3, 1, Temp);
@@ -622,74 +625,56 @@ void read_bme(void){
 		
 }
 
-void read_Dallas(boolean readImmediatelly = false)
+void read_Dallas(void)
 {
 	
 	//Nach dem einschalten des Sensors muss man min 1sec warten bis der Sensor richtige Daten liefert. Das muss der Aufrufer garantieren.
-	
-	static long dallas_lastTime =	0;
-	static long dallas_period =		3000;
-	long timepassed;
+
+	float temp_F;
+	char temp[5] = "DSt";
 		
-	timepassed = millis() - dallas_lastTime;
-	if ((timepassed > dallas_period) || (timepassed < 0) || readImmediatelly)
-	{		
-		float temp_F;
-		char temp[5] = "DSt";
-		dallas_lastTime = millis();
-		
-		for (uint8_t i = 0; i<2; i++){
-			char temp[5] = "Dst";
-			temp_F = dallas.getTempCByIndex(i);
-			//dtostrf(floatVar, minStringWidthIncDecimalPoint, numVarsAfterDecimal, charBuf);
-			char wert[6];
-			dtostrf(temp_F, 3, 1, wert);
-			char tempindex[3];
-			itoa(i, tempindex, 10);
-			strncat(temp,tempindex,2);
-			write_buffer_str(&temp[0], &wert[0]);
-		}
+	for (uint8_t i = 0; i<2; i++){
+		char temp[5] = "Dst";
+		temp_F = dallas.getTempCByIndex(i);
+		//dtostrf(floatVar, minStringWidthIncDecimalPoint, numVarsAfterDecimal, charBuf);
+		char wert[6];
+		dtostrf(temp_F, 3, 1, wert);
+		char tempindex[3];
+		itoa(i, tempindex, 10);
+		strncat(temp,tempindex,2);
+		write_buffer_str(&temp[0], &wert[0]);
+
 	}
 }
 
 
-void read_DHT(boolean readImmediatelly = false)
+void read_DHT(boolean readImmediatelly = FALSE)
 {
 	
 	//Nach dem einschalten des Sensors muss man min 1sec warten bis der Sensor richtige Daten liefert. Das muss der Aufrufer garantieren.
 	
-	static long DHT_lastTime =		0;
-	static long DHT_period =		6000;
-	long timepassed;
+	//float h = dht.readHumidity();
+	//float t = dht.readTemperature();
+	float h = 2.1;
+	float t = 30.12;
 		
-	timepassed = millis() - DHT_lastTime;
-	if ((timepassed > DHT_period) || (timepassed < 0) || readImmediatelly)
-	{
-		
-		//float h = dht.readHumidity();
-		//float t = dht.readTemperature();
-		float h = 2.1;
-		float t = 30.12;
-		
-		float temp_F;
-		DHT_lastTime = millis();
-		if (isnan(t) || isnan(h)) {
-			write_buffer_str("err", "DHT_read");
-			rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferLength);
-		} else {
-			char Temp[10];
-			//dtostrf(floatVar, minStringWidthIncDecimalPoint, numVarsAfterDecimal, charBuf);			
-			dtostrf(h, 1, 0, Temp);
-			write_buffer_str("DHh", &Temp[0]);
-			temp_F = t * 9/5+32;			
-			dtostrf(temp_F, 3, 1, Temp);
-			write_buffer_str("DHt", &Temp[0]);
-		}
+	float temp_F;
+	if (isnan(t) || isnan(h)) {
+		write_buffer_str("err", "DHT_read");
+		rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferLength);
+	} else {
+		char Temp[10];
+		//dtostrf(floatVar, minStringWidthIncDecimalPoint, numVarsAfterDecimal, charBuf);			
+		dtostrf(h, 1, 0, Temp);
+		write_buffer_str("DHh", &Temp[0]);
+		temp_F = t * 9/5+32;			
+		dtostrf(temp_F, 3, 1, Temp);
+		write_buffer_str("DHt", &Temp[0]);
 	}
 }
 
 void read_HC05(void){
-	write_buffer_str("funk", "HC05 read", true);
+	write_buffer_str("funk", "HC05 read");
 }
 
 void read_analog(void){
@@ -697,10 +682,10 @@ void read_analog(void){
 }
 
 boolean read_inputs(void){
-	static boolean readAllInputs = 1;
+	static boolean readAllInputs = TRUE;
 	static uint8_t lastPinState = 0;
-	boolean sendeWert = false;
-	boolean resetBuffer = true;
+
+
 	
 	//#define bit_write(p,m,c) (c ? bit_set(p,m) : bit_clear(p,m))
 	
@@ -709,25 +694,18 @@ boolean read_inputs(void){
 			boolean inputState;
 			inputState = digitalRead(pinMapping[i]) == HIGH;
 			if ((inputState != ((lastPinState & (1 << i)) != 0)) || readAllInputs){
-			//if ((inputState != (lastPinState & (1<<i))) || readAllInputs){
 				char temp[5] = "IN";
 				char tempindex[3];
 				char wert[3];
 				itoa(pinMapping[i], tempindex, 10);
 				strncat(temp, tempindex, 2);
 				itoa(inputState,wert,10);
-				write_buffer_str(temp, wert, resetBuffer);
+				write_buffer_str(temp, wert);
 				bit_write(lastPinState, i, inputState);
-				resetBuffer = false;
-				sendeWert = true;
 			}
 		}
 	}	
-	
-	if (sendeWert){
-		rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferLength);
-	}
-	readAllInputs = 0;
+	readAllInputs = FALSE;
 	return 0;
 }
 
@@ -745,36 +723,27 @@ void loop()
 	timepassed = millis() - sensorTimeOld;
 	//Wir wollen die Sensoren abfragen wenn die Pausezeit um ist, wenn eine sleep Zeit konfiguriert ist lesen wir sofort
 	if ((timepassed > SensorPeriod) | (!sensorenGelesen & !config[sleepTime])){
-		//Zum leeren des Buffers
-		write_buffer_str("","",true);
 		sensorenGelesen = 1;
 		sensorTimeOld = millis();
-		boolean sendeDaten = 0;
 		if (config[digitalSensors] & (1<<readDS18)){	
 			read_Dallas();
-			sendeDaten = 1;
 		}
 		if (config[digitalSensors] & (1<<readHC05)){
 			read_HC05();
-			sendeDaten = 1;
 		}
 		if (config[digitalSensors] & (1<<readBME)){
 			read_bme();
-			sendeDaten = 1;
 		}
 		if (config[digitalSensors] & (1<<readDHT)){
 			read_DHT();
-			sendeDaten = 1;
 		}
 		if (config[math_analog3] || config[math_analog4] || config[math_analog5]){	
 			read_analog();
-			sendeDaten = 1;
-		}
-		if (sendeDaten){
-			rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferLength);
 		}
 	}
 
+	//Zum leeren des Buffers und senden aller Daten
+	write_buffer_str("","");
 	read_inputs();
 	
 	//Watchdog
