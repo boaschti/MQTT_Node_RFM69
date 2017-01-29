@@ -15,6 +15,8 @@ Modifications Needed:
 //Basic Defines  --------------------------------------------------------------------------------------------------
 #include <RFM69.h>
 #include <SPI.h>
+#include <avr/sleep.h>
+#include <avr/wdt.h> 
 //#include <eeprom.h>
 
 //Standardkonfig wird uebernommen wenn JP_2 == GND oder funktion_pin0 == 255 (Komando "w_0":"255")
@@ -147,12 +149,12 @@ boolean check_watchdog_req =0;
 
 #define  nodeControll		20
 #define  sleepTimeMulti		21		//sleepTime Multiplicator
-#define  sleepTime			22		//Sleep time in Sekunden
+#define  sleepTime			22		//Sleep time in Sekunden * 4 sec
 #define  watchdogDelay		23		//watchdog in * 5 sec
 #define  nodeId				24
 #define  networkId			25
 #define  gatewayId			26
-#define  sensorDelay		27		//Messpause der Sensoren in *10 sec
+#define  sensorDelay		27		//Messpause der Sensoren in * 10 sec
 
 //config[] == 0-9Dio, 10-14analog
 //Max of usedDio is 8 see read_inputs()
@@ -263,14 +265,20 @@ uint8_t getJumper(void){
 		}
 }
 
-void setup()
-{
-	//Reset WD Timer 
+void disableWd(void){
+	//Reset WD Timer
 	MCUSR &= ~(1<<WDRF);
 	WDTCSR |= (1<<WDCE) | (1<<WDE);
 	WDTCSR = 0;
-	
-	
+}
+
+void setup()
+{	
+	//disable Watchdog Timer
+	//disableWd();
+	//wdt_reset();
+	disableWd();
+		
 	//getJumper();
 	initVariables();
 	check_improveConfig();
@@ -681,11 +689,46 @@ void read_analog(void){
 	
 }
 
+void go_sleep(void){
+	
+	digitalWrite(LED_2, HIGH);
+	
+	rfm69.sleep();
+	
+	cli();
+	
+	//Enable Watchdog 4sec, interrupt Mode
+	MCUSR = 0;
+	//	WDTCSR |= (1<<WDCE) | (1<<WDE);
+	WDTCSR |= (1<<WDCE) | (1<<WDIE);
+	//WDTCSR = 0;
+	//WDTCSR |= (1<<WDE) | (1<<WDP3); //4sec
+	WDTCSR |= (1<<WDIE) | (1<<WDP3) | (1<<WDP0); //8sec
+	
+	//WDTCSR |= (1<<WDIE) | (1<<WDP3) | (1<<WDP0); //8sec
+	
+	for (uint16_t i = 0; i < (config[sleepTime] * config[sleepTimeMulti]); i++){
+		set_sleep_mode(SLEEP_MODE_PWR_DOWN);   // sleep mode is set here	    
+		sleep_enable();         // enables the sleep bit in the mcucr register
+		
+		sei();
+		
+		sleep_mode();           // here the device is actually put to sleep!!
+
+		sleep_disable();        // first thing after waking from sleep:
+	}
+	
+	disableWd();
+
+	rfm69.receiveDone();	//set RFM to RX
+	
+    //detachInterrupt(0);     // disables interrupt 0 on pin 2 so the
+	
+	digitalWrite(LED_2, LOW);
+}
 boolean read_inputs(void){
 	static boolean readAllInputs = TRUE;
 	static uint8_t lastPinState = 0;
-
-
 	
 	//#define bit_write(p,m,c) (c ? bit_set(p,m) : bit_clear(p,m))
 	
@@ -713,9 +756,10 @@ boolean read_inputs(void){
 void loop()
 {  
 	long timepassed;
+	boolean SleepAlowed = TRUE;
 	static long sensorTimeOld;
 	static long watchdogTimeOld;
-	static boolean sensorenGelesen = 0;
+	static boolean sensorenGelesen = FALSE;
 	
 	digitalWrite(LED_3, LOW);
 
@@ -723,7 +767,7 @@ void loop()
 	timepassed = millis() - sensorTimeOld;
 	//Wir wollen die Sensoren abfragen wenn die Pausezeit um ist, wenn eine sleep Zeit konfiguriert ist lesen wir sofort
 	if ((timepassed > SensorPeriod) | (!sensorenGelesen & !config[sleepTime])){
-		sensorenGelesen = 1;
+		sensorenGelesen = TRUE;
 		sensorTimeOld = millis();
 		if (config[digitalSensors] & (1<<readDS18)){	
 			read_Dallas();
@@ -741,10 +785,11 @@ void loop()
 			read_analog();
 		}
 	}
-
+	
+	//Lesen der digitalen Inputs
+	read_inputs();
 	//Zum leeren des Buffers und senden aller Daten
 	write_buffer_str("","");
-	read_inputs();
 	
 	//Watchdog
 	timepassed = millis() - watchdogTimeOld;
@@ -756,6 +801,10 @@ void loop()
 	
 	if(check_watchdog_req){
 		//manage WD Ports
+	}
+	
+	if((sleepTime > 0) && (sleepTimeMulti > 0) && SleepAlowed){
+		go_sleep();
 	}
 	
 	digitalWrite(LED_3, HIGH);
@@ -797,4 +846,9 @@ ISR (PCINT1_vect)
 ISR (PCINT2_vect)
 {
 
+}
+
+ISR (WDT_vect)
+{
+	
 }
