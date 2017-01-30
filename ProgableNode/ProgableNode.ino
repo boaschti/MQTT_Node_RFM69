@@ -35,6 +35,7 @@ Modifications Needed:
 #define LED_2			6 //optinonal to Power >3V sensors from 1.8V batt voltage: Power for external Sensors
 #define LED_3			7 
 #define ResetRfmPin		2
+#define rxPollTime		300 // Zeit in ms (ca) die auf eine Message gewartet wird bevor der Node in den Sleep geht
 //you can use the analog pins as digital pins, by numbering them 14 - 19
 //Analog Input PC0-PC5
 #define JP_1		  16 //PC2 
@@ -699,11 +700,8 @@ void go_sleep(void){
 	MCUSR = 0;
 	//	WDTCSR |= (1<<WDCE) | (1<<WDE);
 	WDTCSR |= (1<<WDCE) | (1<<WDIE);
-	//WDTCSR = 0;
 	//WDTCSR |= (1<<WDE) | (1<<WDP3); //4sec
 	WDTCSR |= (1<<WDIE) | (1<<WDP3) | (1<<WDP0); //8sec
-	
-	//WDTCSR |= (1<<WDIE) | (1<<WDP3) | (1<<WDP0); //8sec
 	
 	for (uint16_t i = 0; i < (config[sleepTime] * config[sleepTimeMulti]); i++){
 		set_sleep_mode(SLEEP_MODE_PWR_DOWN);   // sleep mode is set here	    
@@ -757,15 +755,19 @@ void loop()
 	boolean SleepAlowed = TRUE;
 	static long sensorTimeOld;
 	static long watchdogTimeOld;
-	static boolean sensorenGelesen = FALSE;
+	static boolean sensorenLesen = FALSE;
 	
 	digitalWrite(LED_3, LOW);
 
 	radio_Rx_loop();
 	timepassed = millis() - sensorTimeOld;
-	//Wir wollen die Sensoren abfragen wenn die Pausezeit um ist, wenn eine sleep Zeit konfiguriert ist lesen wir sofort
-	if ((timepassed > SensorPeriod) | (!sensorenGelesen & !config[sleepTime])){
-		sensorenGelesen = TRUE;
+	//Wir wollen die Sensoren abfragen wenn die Pausezeit um ist, wenn sensorenLesen gesetzt ist, dann lesen wir sofort
+	if ((timepassed > SensorPeriod) || sensorenLesen){
+		if (sensorenLesen && (config[sleepTime] > 0)){
+			//wartezeit bis Sensoren versorgt sind
+			delay(1000);
+		}
+		sensorenLesen = FALSE;
 		sensorTimeOld = millis();
 		if (config[digitalSensors] & (1<<readDS18)){	
 			read_Dallas();
@@ -801,8 +803,13 @@ void loop()
 		//manage WD Ports
 	}
 	
-	if((sleepTime > 0) && (sleepTimeMulti > 0) && SleepAlowed){
+	if((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0)){
+		for (uint16_t i = 0; i <= rxPollTime; i++){
+			radio_Rx_loop();
+			delay(1);
+		}
 		go_sleep();
+		//sensorenLesen = TRUE; //Wir wollen, dass die Sensoren sofort gelesen werden
 	}
 	
 	digitalWrite(LED_3, HIGH);
