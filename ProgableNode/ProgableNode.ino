@@ -72,7 +72,9 @@ RFM69 rfm69;
 	Adafruit_BME280 bme;
 	
 //ADC6 atmega voltage, to measure switch on Port 6 
-	#define atVolage		6
+	#define circuitOn		6 //Port6
+	//#define atVolage		6 //ADC6
+	#define atVolage		3 //ADC6
 	
 //Pins to Power Sensor
 	#define pumpPin			6
@@ -699,6 +701,19 @@ void read_HC05(void){
 	write_buffer_str("funk", "HC05 read");
 }
 
+void read_Batterie(void){
+
+	uint8_t oldvalue;
+	
+	oldvalue = digitalRead(circuitOn);
+	digitalWrite(circuitOn,HIGH);
+	delay(1);
+	char temp[10];
+	ltoa(analogRead(atVolage), temp, 10);
+	write_buffer_str("batt" , &temp);
+	digitalWrite(circuitOn,oldvalue);
+}
+
 void read_analog(void){
 	
 }
@@ -783,6 +798,10 @@ void loop()
 		}
 		sensorenLesen = FALSE;
 		sensorTimeOld = millis();
+		//Wenn eine SleepTime configuriert ist gehen wir davon aus dass die Batteriespanung auch gelesen werden soll
+		if (config[sleepTime] > 0){
+			read_Batterie();
+		}
 		if (config[digitalSensors] & (1<<readDS18)){	
 			read_Dallas();
 		}
