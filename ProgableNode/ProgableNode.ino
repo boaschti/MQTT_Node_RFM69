@@ -526,16 +526,13 @@ boolean readMessage(char *message){
 				digitalWrite(pinMapping[atoi(parts[i + 1])],0);
 			}
 			//setze Bit "readInput" fuer den jeweiligen Port damit der Status zurueck gesendet wird
-			//char temp[10] = "infoP";
-			//strncat(temp, parts[i+1],2);
-			//write_buffer_str(temp, parts[i + 2]);
 			i++;
 			i++;
 		}
 	}
 	if (resetCPU){
-		const char errorString[] = "\"info\":\"restartNode\"";
-		rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));		
+		write_buffer_str("info", "restart_Node");
+		write_buffer_str("","");	
 		WDTCSR |= (1<<WDCE) | (1<<WDE);
 		WDTCSR |= (1<<WDE) | (1<<WDP1) | (1<<WDP2);
 		while(1);
@@ -834,8 +831,8 @@ void loop()
 	timepassed = millis() - watchdogTimeOld;
 	if ((timepassed > WatchdogPeriod) & (WatchdogPeriod > 0)){
 		watchdogTimeOld = millis();
-		const char errorString[] = "\"wd\":\"WD MSG\"";
-		rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
+		write_buffer_str("wd", "WD_MSG");
+		write_buffer_str("","");
 	}
 	
 	if(check_watchdog_req){
