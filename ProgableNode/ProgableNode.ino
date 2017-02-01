@@ -252,7 +252,7 @@ void setupPins(void)
 			pinMode(pinMapping[i], (config[i] & (1<<in_out)));
 			digitalWrite(pinMapping[i], (config[i] & (1<<port)));
 		}
-		if (config[i] & (1 << pcInt) & !(1 << in_out)){	
+		if (config[i] & (1 << pcInt)){	
 			pciSetup(pinMapping[i]);
 		}
 	}	
