@@ -352,6 +352,9 @@ void setup()
 			rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
 		}
 	}
+
+	const char errorString[] = "\"info\":\"started_Node\"";
+	rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
 }
 
  boolean write_buffer_str(char *name, void* wert)
@@ -550,7 +553,7 @@ void radio_Rx_loop(void) {
 		
 		digitalWrite(LED_1, HIGH);
 		
-		//speichern der Daten, da evt schon wieder weiter ankommen
+		//speichern der Daten, da evt schon wieder welche ankommen
 		senderId = rfm69.SENDERID;
 		rssi = rfm69.RSSI;
 		dataLen = rfm69.DATALEN;
