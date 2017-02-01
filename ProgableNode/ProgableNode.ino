@@ -76,7 +76,7 @@ RFM69 rfm69;
 	//#define atVolage		6 //ADC6
 	#define atVolage		3 //ADC6
 	
-//Pins to Power Sensor
+//Pins to Power up the Sensors
 	#define pumpPin			6
 	#define supplyPin		5
 	
@@ -257,6 +257,12 @@ void setupPins(void)
 		}
 	}	
 
+	//Wenn eine SleepTime configuriert ist gehen wir davon aus dass die Batteriespanung auch gelesen werden soll
+	if (config[sleepTime] > 0){
+		pinMode(circuitOn, OUTPUT);
+		pinMode(atVolage, INPUT);
+	}
+	
 	if (config[digitalSensors] & (1<<readHC05)){
 		pinMode(HC05pingPin, INPUT);
 		pinMode(HC05trigPin, OUTPUT);
