@@ -35,7 +35,7 @@ Modifications Needed:
 #define LED_2			6 //optinonal to Power >3V sensors from 1.8V batt voltage: Power for external Sensors
 #define LED_3			7 
 #define ResetRfmPin		2
-#define rxPollTime		300 // Zeit in ms (ca) die auf eine Message gewartet wird bevor der Node in den Sleep geht
+#define rxPollTime		3000 // Zeit in ms (ca) die auf eine Message gewartet wird bevor der Node in den Sleep geht
 //you can use the analog pins as digital pins, by numbering them 14 - 19
 //Analog Input PC0-PC5
 #define JP_1		  16 //PC2 
