@@ -16,6 +16,7 @@ Modifications Needed:
 #include <RFM69.h>
 #include <SPI.h>
 #include <avr/sleep.h>
+//#include <stdint.h>
 #include <avr/wdt.h> 
 //#include <eeprom.h>
 
@@ -46,6 +47,7 @@ Modifications Needed:
 
 
 RFM69 rfm69;
+boolean BreakSleep = 0;
 
 //end Basic Defines ---------------------------------------------------------------------------------------------------
 
@@ -385,6 +387,7 @@ void setup()
 				delay(config[nodeId]*1.3);
 				if (!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer)){
 					//Ein Fehler ist aufgetreten wir merken uns den Bufferinhalt
+					radio_Rx_loop(); //RFM->RXMode
 					return FALSE;
 				}else{
 					sendBufferPointer = 0;
@@ -420,9 +423,11 @@ void setup()
 	{
 		const char errorString[] = "\"err\":\"Message to long\"";
 		rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
+		radio_Rx_loop(); //RFM->RXMode
 		return FALSE;
 	}
 	
+	radio_Rx_loop(); //RFM->RXMode
 	return TRUE;
 }
 
@@ -519,6 +524,7 @@ boolean readMessage(char *message){
 			char temp[10] = "infoReg";
 			strncat(temp, parts[i+1],2);
 			sendInt(temp, config[atoi(parts[i + 1])]);
+			i++;
 			i++;
 		}
 		//zum setzen von Ports
@@ -774,8 +780,10 @@ boolean read_inputs(void){
 				itoa(pinMapping[i], tempindex, 10);
 				strncat(temp, tempindex, 2);
 				itoa(inputState,wert,10);
-				write_buffer_str(temp, wert);
-				bit_write(lastPinState, i, inputState);
+				//Wir wollen uns den aktuellen State nur erken wenn das senden geklappt hat (In der Hoffung dass der Pegel dann noch anliegt)
+				if (write_buffer_str(temp, wert)){
+					bit_write(lastPinState, i, inputState);
+				}
 			}
 		}
 	}	
@@ -790,16 +798,15 @@ void loop()
 	boolean SleepAlowed = TRUE;
 	static long sensorTimeOld;
 	static long watchdogTimeOld;
-	static boolean sensorenLesen = FALSE;
+	static boolean sensorenLesen = TRUE;
 	
 	digitalWrite(LED_3, LOW);
 
-	radio_Rx_loop();
 	timepassed = millis() - sensorTimeOld;
-	//Wir wollen die Sensoren abfragen wenn die Pausezeit um ist, wenn sensorenLesen gesetzt ist, dann lesen wir sofort
+	//Wir wollen die Sensoren abfragen wenn die Pausezeit vorbei ist, wenn sensorenLesen gesetzt ist, dann lesen wir sofort
 	if ((timepassed > SensorPeriod) || sensorenLesen){
-		if (sensorenLesen && (config[sleepTime] > 0)){
-			//wartezeit bis Sensoren versorgt sind
+		//wartezeit bis die Sensoren stabil versorgt sind. sensorenLesenist nur gesetzt wenn wir aus dem Sleep kommen
+		if (sensorenLesen && (config[nodeControll] & (1 << pumpSensorVoltage))){ 
 			delay(1000);
 		}
 		sensorenLesen = FALSE;
@@ -819,10 +826,8 @@ void loop()
 		}
 		if (config[digitalSensors] & (1<<readDHT)){
 			read_DHT();
-		}
-		if (config[math_analog3] || config[math_analog4] || config[math_analog5]){	
-			read_analog();
-		}
+		}		
+		read_analog();
 	}
 	
 	//Lesen der digitalen Inputs
