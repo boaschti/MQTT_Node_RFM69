@@ -87,7 +87,7 @@ RFM69 rfm69;
 
 unsigned long WatchdogPeriod;
 unsigned long SensorPeriod;
-unsigned long SleepTime;
+
 
 
 //end Board Defines ---------------------------------------------------------------------------------------------------
@@ -168,6 +168,22 @@ const uint8_t pinMapping[15]{0,1,17,18,19,9,16,0,0,0,3,4,5,0,0};
 #define bit_clear(p,m) ((p) &= ~(1<<m))
 #define bit_write(p,m,c) (c ? bit_set(p,m) : bit_clear(p,m))
 
+#define wdt_set(value)   \
+__asm__ __volatile__ (  \
+"in __tmp_reg__,__SREG__" "\n\t"    \
+"cli" "\n\t"    \
+"wdr" "\n\t"    \
+"sts %0,%1" "\n\t"  \
+"out __SREG__,__tmp_reg__" "\n\t"   \
+"sts %0,%2" \
+: /* no outputs */  \
+: "M" (_SFR_MEM_ADDR(_WD_CONTROL_REG)), \
+"r" (_BV(_WD_CHANGE_BIT) | _BV(WDE)), \
+"r" ((uint8_t) ((value & 0x08 ? _WD_PS3_MASK : 0x00) | \
+_BV(WDIE) | (value & 0x07)) ) \
+: "r0"  \
+)
+
 void pciSetup(byte pin)
 {
 	*digitalPinToPCMSK(pin) |= bit (digitalPinToPCMSKbit(pin));  // enable pin
@@ -198,7 +214,6 @@ void initVariables(void)
 		config[i] = eeprom_read_byte(&eeConfig[i]);
 	}
 	
-	SleepTime = config[sleepTime] * config[sleepTimeMulti] * 1000;
 	SensorPeriod = config[sensorDelay] * 10000;
 	WatchdogPeriod = config[watchdogDelay] * 5000;
 	
@@ -690,19 +705,14 @@ void read_analog(void){
 
 void go_sleep(void){
 	
+	BreakSleep = FALSE;
+
 	digitalWrite(LED_2, HIGH);
 	
 	rfm69.sleep();
 	
-	cli();
-	
-	//Enable Watchdog 4sec, interrupt Mode
-	MCUSR = 0;
-	//	WDTCSR |= (1<<WDCE) | (1<<WDE);
-	WDTCSR |= (1<<WDCE) | (1<<WDIE);
-	//WDTCSR |= (1<<WDE) | (1<<WDP3); //4sec
-	WDTCSR |= (1<<WDIE) | (1<<WDP3) | (1<<WDP0); //8sec
-	
+	wdt_set(WDTO_8S);
+
 	for (uint16_t i = 0; i < (config[sleepTime] * config[sleepTimeMulti]); i++){
 		set_sleep_mode(SLEEP_MODE_PWR_DOWN);   // sleep mode is set here	    
 		sleep_enable();         // enables the sleep bit in the mcucr register
@@ -711,7 +721,10 @@ void go_sleep(void){
 		
 		sleep_mode();           // here the device is actually put to sleep!!
 
-		sleep_disable();        // first thing after waking from sleep:
+		if (BreakSleep){		//Sleep untebrechen wenn ein Interrupt von einem Eingang kam
+			break;
+		}
+		
 	}
 	
 	disableWd();
@@ -722,6 +735,7 @@ void go_sleep(void){
 	
 	digitalWrite(LED_2, LOW);
 }
+
 boolean read_inputs(void){
 	static boolean readAllInputs = TRUE;
 	static uint8_t lastPinState = 0;
@@ -804,12 +818,13 @@ void loop()
 	}
 	
 	if((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0)){
+		//Wir pruefen bis der Timeout abgelaufen ist ob noch eine Nachricht kommt
 		for (uint16_t i = 0; i <= rxPollTime; i++){
 			radio_Rx_loop();
 			delay(1);
 		}
 		go_sleep();
-		//sensorenLesen = TRUE; //Wir wollen, dass die Sensoren sofort gelesen werden
+		//todo sensorenLesen = TRUE; //Wir wollen, dass die Sensoren sofort gelesen werden
 	}
 	
 	digitalWrite(LED_3, HIGH);
@@ -840,20 +855,26 @@ float microsecondsToCentimeters(long microseconds)
 
 ISR (PCINT0_vect)
 {
-
+	sleep_disable();        // first thing after waking from sleep:
+	read_inputs();
+	BreakSleep = TRUE;
 }
 
 ISR (PCINT1_vect)
 {
-
+	sleep_disable();        // first thing after waking from sleep:
+	read_inputs();
+	BreakSleep = TRUE;
 }
 
 ISR (PCINT2_vect)
 {
-
+	sleep_disable();        // first thing after waking from sleep:
+	read_inputs();
+	BreakSleep = TRUE;
 }
 
 ISR (WDT_vect)
 {
-	
+	sleep_disable();        // first thing after waking from sleep:
 }
