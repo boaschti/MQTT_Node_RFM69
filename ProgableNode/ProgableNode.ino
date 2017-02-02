@@ -118,6 +118,7 @@ boolean check_watchdog_req =0;
 #define  readPlaint			0
 #define  readLDR			1
 #define  readRain			2
+#define  readRaw			3
 
 //Bits der Variable digitalsensors
 #define  readDS18			0
@@ -163,8 +164,8 @@ boolean check_watchdog_req =0;
 //config[] == 0-9Dio, 10-14analog
 //Max of usedDio is 8 see read_inputs()
 #define usedDio				7
-//#define usedAnalog			3
-const uint8_t pinMapping[15]{0,1,17,18,19,9,16,0,0,0,3,4,5,0,0};
+#define usedAnalog			4
+const uint8_t pinMapping[15]{0,1,17,18,19,9,16,0,0,0,2,3,4,5,0};
 //der SSPin macht noch Probleme Spi funktioniert dann nicht mehr!
 //const uint8_t pinMapping[15]{0,1,17,18,19,9,10,0,0,0,3,4,5,0,0};
 
@@ -244,7 +245,8 @@ void setupPins(void)
 	
 	//starte ADC for readPlaint oder readLDR oder readRain
 	if (config[math_analog2] || config[math_analog3] || config[math_analog4] || config[math_analog5]){
-		analogReference(INTERNAL);		
+		//analogReference(INTERNAL1V1);		
+		ADMUX |= (1<<REFS1) | (1<<REFS0);
 	}
 	
 	//Config DIOs
@@ -359,22 +361,31 @@ void setup()
 	rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
 }
 
- boolean write_buffer_str(char *name, void* wert)
+ boolean write_buffer_str(char *name, char *wert, boolean strWert = FALSE )
 {
 	/*
-	write_buffer_str("abc","def") -> Es wird ein String ""abc":"def"" in den Buffer geschrieben
+	write_buffer_str("abc","123") -> Es wird ein String '"abc":123' in den Buffer geschrieben
+	write_buffer_str("abc","123",FALSE) -> Es wird ein String '"abc":"def"' in den Buffer geschrieben	
 	write_buffer_str("","") -> Es werden alle Daten gesendet und der Pointer auf 0 gesetzt
 	
 	Es wird immer ueberprueft ob die maxixmale laenge von 61Bytes (begrenzt vom RFM Modul) ueberschritten wird 
 	Es wird immer ueberprueft ob die neue Nachricht + messageOverhead noch Platz hat. Wenn nicht wird erst gesendet
 	*/
 	
-	#define messageOverhead 6
+	#define messageOverheadStr 6	//"":"",
+	#define messageOverheadDec 4	//"":,
 	
 	static char sendBuffer[RF69_MAX_DATA_LEN];
 	static uint8_t sendBufferPointer = 0;	
 	uint8_t nameLength = strnlen(name, RF69_MAX_DATA_LEN);
 	uint8_t wertLength = strlen(wert);
+	uint8_t messageOverhead;
+	
+	if (strWert == TRUE){
+		messageOverhead = messageOverheadDec;
+	}else{
+		messageOverhead = messageOverheadStr;
+	}
 	
 	//Es wird geprueft ob die Nachricht ueberhaupt in den Buffer passt ansonsten senden wir eine Fehlermeldung
 	if ((nameLength + wertLength + messageOverhead) <= RF69_MAX_DATA_LEN)
@@ -407,14 +418,18 @@ void setup()
 
 			sendBuffer[sendBufferPointer++] = '\"';
 			sendBuffer[sendBufferPointer++] = ':';
-			sendBuffer[sendBufferPointer++] = '\"';
+			if (strWert == TRUE){
+				sendBuffer[sendBufferPointer++] = '\"';
+			}
 
 			for (uint8_t loop = 0; loop < wertLength; loop++)
 			{
 				sendBuffer[sendBufferPointer++] = ((char*)(wert))[loop];
 			}
 
-			sendBuffer[sendBufferPointer++] = '\"';
+			if (strWert == TRUE){
+				sendBuffer[sendBufferPointer++] = '\"';
+			}
 			sendBuffer[sendBufferPointer++] = ',';
 			sendBuffer[sendBufferPointer] = '\0';
 		}
@@ -540,7 +555,7 @@ boolean readMessage(char *message){
 		}
 	}
 	if (resetCPU){
-		write_buffer_str("info", "restart_Node");
+		write_buffer_str("info", "restart_Node", TRUE);
 		write_buffer_str("","");	
 		WDTCSR |= (1<<WDCE) | (1<<WDE);
 		WDTCSR |= (1<<WDE) | (1<<WDP1) | (1<<WDP2);
@@ -612,9 +627,9 @@ void testsend(void)
 		
 	int16_t test1 = 1876;
 	float test2 = 1.7551;
-	write_buffer_str("wert_1", "bla");
-	write_buffer_str("wert_2", "testvariable_1_xxx_yyyy_");
-	write_buffer_str("message", "message_m");
+	write_buffer_str("wert_1", "bla",TRUE);
+	write_buffer_str("wert_2", "testvariable_1_xxx_yyyy_",TRUE);
+	write_buffer_str("message", "message_m",TRUE);
 	//String Temp = String(test2,3);
 	//write_buffer_str("test1", &Temp[0], FALSE);
 	//write_buffer_str("test1", ltoa(test1, strlen(test1),10));
@@ -625,8 +640,8 @@ void testsend(void)
 		delay(10);
 		digitalWrite(LED_2, LOW);
 	}
-	write_buffer_str("wert_xy", "testabc");
-	write_buffer_str("message", "message2_message2_message2_message2_message2_message2_message2_message2_message2_message2_message2");
+	write_buffer_str("wert_xy", "testabc",TRUE);
+	write_buffer_str("message", "message2_message2_message2_message2_message2_message2_message2_message2_message2_message2_message2",TRUE);
 	if(!write_buffer_str("","")){
 		digitalWrite(LED_2, HIGH);
 		delay(10);
@@ -696,7 +711,7 @@ void read_DHT(boolean readImmediatelly = FALSE)
 		
 	float temp_F;
 	if (isnan(t) || isnan(h)) {
-		write_buffer_str("err", "DHT_read");
+		write_buffer_str("err", "DHT_read",TRUE);
 		write_buffer_str("","");
 	} else {
 		char Temp[10];
@@ -710,7 +725,7 @@ void read_DHT(boolean readImmediatelly = FALSE)
 }
 
 void read_HC05(void){
-	write_buffer_str("funk", "HC05 read");
+	write_buffer_str("funk", "HC05 read",TRUE);
 }
 
 void read_Batterie(void){
@@ -721,12 +736,37 @@ void read_Batterie(void){
 	digitalWrite(circuitOn,HIGH);
 	delay(1);
 	char temp[10];
-	ltoa(analogRead(atVolage), temp, 10);
-	write_buffer_str("batt" , &temp);
+	itoa(analogRead(atVolage), temp, 10);
+	write_buffer_str("batt" , temp);
 	digitalWrite(circuitOn,oldvalue);
 }
 
 void read_analog(void){
+	
+	for (uint8_t i = 10; i < (usedAnalog + 10); i++){
+		if (config[i] != 0){
+			char temp[6] = "Ain";
+			char tempindex[3];
+			char wert[7];
+			itoa(pinMapping[i], tempindex, 10);
+			strncat(temp, tempindex, 2);
+			uint16_t OutputWert;
+			OutputWert = analogRead(pinMapping[i]);
+			if (config[i] & (1<<readPlaint)){
+				
+			}else if (config[i] & (1<<readRain)){
+				
+			}else if (config[i] & (1<<readLDR)){
+				
+			}else if (config[i] & (1<<readRaw)){
+				//Wir muessen nichts berechnen
+			}
+			itoa(OutputWert,wert,10);
+			write_buffer_str(temp,wert);
+		}
+		
+	}
+	
 	
 }
 
@@ -756,7 +796,7 @@ void go_sleep(void){
 	
 	disableWd();
 
-	rfm69.receiveDone();	//set RFM to RX
+	//rfm69.receiveDone();	//set RFM to RX
 	
     //detachInterrupt(0);     // disables interrupt 0 on pin 2 so the
 	
@@ -780,7 +820,7 @@ boolean read_inputs(void){
 				itoa(pinMapping[i], tempindex, 10);
 				strncat(temp, tempindex, 2);
 				itoa(inputState,wert,10);
-				//Wir wollen uns den aktuellen State nur erken wenn das senden geklappt hat (In der Hoffung dass der Pegel dann noch anliegt)
+				//Wir wollen uns den aktuellen State nur merken wenn das senden geklappt hat (In der Hoffung dass der Pegel dann noch anliegt)
 				if (write_buffer_str(temp, wert)){
 					bit_write(lastPinState, i, inputState);
 				}
@@ -799,14 +839,15 @@ void loop()
 	static long sensorTimeOld;
 	static long watchdogTimeOld;
 	static boolean sensorenLesen = TRUE;
+	static boolean wdSenden = FALSE;
 	
 	digitalWrite(LED_3, LOW);
 
 	timepassed = millis() - sensorTimeOld;
 	//Wir wollen die Sensoren abfragen wenn die Pausezeit vorbei ist, wenn sensorenLesen gesetzt ist, dann lesen wir sofort
-	if ((timepassed > SensorPeriod) || sensorenLesen){
-		//wartezeit bis die Sensoren stabil versorgt sind. sensorenLesenist nur gesetzt wenn wir aus dem Sleep kommen
-		if (sensorenLesen && (config[nodeControll] & (1 << pumpSensorVoltage))){ 
+	if ((timepassed > SensorPeriod) || (sensorenLesen == TRUE)){
+		//wartezeit bis die Sensoren gelesen werden koennen (DS18b20) sensorenLesen ist nur gesetzt wenn wir aus dem Sleep kommen oder die CPU neu gestartet wurde
+		if ((sensorenLesen == TRUE) && (config[digitalSensors] & (1<<readDS18))){ 
 			delay(1000);
 		}
 		sensorenLesen = FALSE;
@@ -832,16 +873,16 @@ void loop()
 	
 	//Lesen der digitalen Inputs
 	read_inputs();
-	//Zum leeren des Buffers und senden aller Daten
-	write_buffer_str("","");
 	
 	//Watchdog
 	timepassed = millis() - watchdogTimeOld;
-	if ((timepassed > WatchdogPeriod) & (WatchdogPeriod > 0)){
+	if (((timepassed > WatchdogPeriod) || (wdSenden == TRUE)) && (WatchdogPeriod > 0)){
 		watchdogTimeOld = millis();
-		write_buffer_str("wd", "WD_MSG");
-		write_buffer_str("","");
+		write_buffer_str("wd", "WD_MSG",TRUE);
 	}
+
+	//Zum leeren des Buffers und senden aller Daten
+	write_buffer_str("","");
 	
 	if(check_watchdog_req){
 		//manage WD Ports
@@ -854,7 +895,8 @@ void loop()
 			delay(1);
 		}
 		go_sleep();
-		//todo sensorenLesen = TRUE; //Wir wollen, dass die Sensoren sofort gelesen werden
+		sensorenLesen = TRUE; //Wir wollen, dass die Sensoren sofort gelesen werden
+		wdSenden = TRUE;
 	}
 	
 	digitalWrite(LED_3, HIGH);
