@@ -102,69 +102,81 @@ unsigned long SensorPeriod;
 uint8_t eeConfig[configSize] EEMEM;
 uint8_t config[configSize];
 uint8_t eeEncryptKey[16] EEMEM;
-boolean check_watchdog_req =0;
 
+
+//Folgende Definitionen zeigen die Bit stellen der einstellbaren Funktionen.
+
+//Es koennen folgende  Eigenschaften fuer die Pins eingestellt werden:
 //Bits der Variablen funktion_pin..
-#define in_out				0	//DDR wie im Atmel Datenblatt 0=in
-#define port				1	//PORT wie im Atmel Datenblatt
-#define pcInt				2
-#define pwm					3
-#define wdinvert			4	//0==Pin High wenn Wd -> OK
-#define wdreq				5	//Watchdog fuer diesen Pin ein
-#define readInput			6
-//debounce ??
+#define in_out			0		    //DDR wie im Atmel Datenblatt 0=in
+#define port            1           //PORT wie im Atmel Datenblatt 1=High(outputMode)/1=Pullup(inputMode)
+#define pcInt           2           //Der Pin loest einen Interrupt aus (aufwachen aus dem Sleep)
+#define pwm             3           //Der Pin gibt ein software PWM Signal aus
+#define wdDefault       4           //Zustand in den der watchdog faellt wenn er nicht getriggert wird (nur wenn kein sleep aktiv ist!)
+#define wdReq           5           //Watchdog fuer diesen Pin aktivieren
+#define readInput       6           //Ruecklesen des Pins und senden der Daten (polling)
 
+//Zum konfigurieren der analog Inputs muss man angeben wie der Wert verrechnet wird.
 //Bits der Variablen math_analog..
-#define  readPlaint			0
-#define  readLDR			1
-#define  readRain			2
-#define  readRaw			3
+#define readPlaint      0           //Arduino Pflanzen Feuchte Sensor (untested)
+#define readLDR         1           //Photo Widerstand 10k pullup
+#define readRain        2           //Arduino Regen Sensor
+#define readRaw        3            //raw adc Wert
 
+//Zum konfigurieren der digitalen Sensoren muss man nur angeben welche Sensoren gelesen werden sollen.
 //Bits der Variable digitalsensors
-#define  readDS18			0
-#define  readHC05			1
-#define  readBME			2
-#define	 readDHT			3
+#define readDS18        0           //(Pins s. defines ONE_WIRE_BUS) (Quartz erforderlich)
+#define readHC05        1           //Ultraschall Sensor (Pins s. defines HC05pingPin und HC05trigPin) (Quartz erforderlich)
+#define readBME         2           //BME280 und BMP280 (Standart I2C Pins)
+#define readDHT         3           //(Quartz erforderlich)
 
+//Zum kofigurieren von digitalen Aktoren muss man nur angeben welche Aktoren verbaut sind.
 //Bits der Variable digitalOut
-#define	 writeWsLed			0
+#define writeWsLed      0           //Max 255 ws2812b LEDs
+#define uart			1
+#define dmx             2           //Wenn ein DMX Signal ausgegeben werden soll (Quartz erforderlich)
 
+//Zum einstellen des Verhaltens der Node:
 //Bits der Variable nodeControll
-#define sensorPower			0
-#define pumpSensorVoltage	1
-#define uart				2
-#define i2c					3
-#define dmx					4
+#define sensorPower			0       //der supplyPin (5) wird zum Versorgen von Sensoren und fuer die LED2 verwendet. Wenn 0 dann nur fue die LED2.
+#define pumpSensorVoltage   1		//der pumpPin (6) wird zum verdoppeln der Betriebsspannnung fuer Sensoren verwendet. Sowie fuer die LED1. Wenn 0 dann nur fue die LED1.
 
-//Bytes des Config/outConfig Arrays (outConfig nur fuer Dio Pins 0-usedDio)
-#define  funktion_pin0		0
-#define  funktion_pin1		1
-#define  funktion_pin17		2
-#define  funktion_pin18		3
-#define  funktion_pin19		4
-#define  funktion_pin9		5
-#define  funktion_pin16		6
 
-#define	 math_analog2		10
-#define	 math_analog3		11
-#define  math_analog4		12
-#define  math_analog5		13
-#define	 digitalSensors		15
-#define  digitalOut			16
+//Die folgenden Definitionen zeigen die Stelle im BYTE Array wo die Einstellungen gespeichert sind:
+//Man kann direkt auf das ARRAY per Funk zugreifen die Werte sind immer dezimal:
+//"w_5":"3" -> Zum Schreiben einer 3 an Stelle 5
+//"r_5":"3" -> Zum Lesen der Stelle 5 (die "3" wird gebraucht allerdings ignoriert)
+//"p_5":"1" -> Zum setzen und ruecksetzen des Ports 5 (funktion_pin..)
 
-#define  nodeControll		20
-#define  sleepTimeMulti		21		//sleepTime Multiplicator
-#define  sleepTime			22		//Sleep time in Sekunden * 4 sec
-#define  watchdogDelay		23		//watchdog in * 5 sec
-#define  nodeId				24
-#define  networkId			25
-#define  gatewayId			26
-#define  sensorDelay		27		//Messpause der Sensoren in * 10 sec
+//Bytes des Config Arrays
+#define  funktion_pin0          0
+#define  funktion_pin1          1
+#define  funktion_pin17         2
+#define  funktion_pin18         3
+#define  funktion_pin19         4
+#define  funktion_pin9          5
+#define  funktion_pin16         6
 
-//config[] == 0-9Dio, 10-14analog
-//Max of usedDio is 8 see read_inputs()
-#define usedDio				7
-#define usedAnalog			4
+#define  math_analog2           10
+#define  math_analog3           11
+#define  math_analog4           12
+#define  math_analog5           13
+#define  digitalSensors         15
+#define  digitalOut             16
+
+#define  nodeControll           20
+#define  sleepTimeMulti         21    //sleepTime Multiplikator
+#define  sleepTime              22    //Sleep time in Sekunden * 8 sec, Wenn der Timer gesetzt ist wird auch die Batteriespannung gemessen
+#define  watchdogTimeout        23    //watchdog in * 8 sec, Zeit bis zum abfallen des Watchdogs und setzen der Pins auf den vorgegebenen Zustand (wdDefault). todo Der Sleep wird gesperrt wenn der Watchdog nicht abgefallen ist.
+#define  watchdogDelay          24    //watchdog in * 5 sec, Zeit bis zum nachsten senden eines Watchdogs (Nur wenn sleepTime == 0 konfiguriert ist oder der watchdog durch staendiges Nachtriggern den Sleep blokiert. todo Ansonsten wird der Watchdog sofort nach dem Aufwachen gesendet wenn watchdogDelay>0)
+#define  nodeId                 27    //NodeId dieses Sensors (einzigartig im Netzwerk)
+#define  networkId              28    //NetworkID dieses Sensors (alle gleich im Netzwerk)
+#define  gatewayId              29    //GatewayID an diese Addresse werden die Daten geschickt und es werden nur Daten von dieser Addresse beruecksichitgt. Todo Sollten Daten von einer Anderen Adresse kommen werden sie an das Gateway weitergeleitet.
+#define  sensorDelay            30    //Messpause der Sensoren in * 10 sec (Nur wenn sleepTime == 0 konfiguriert ist oder der watchdog durch staendiges Nachtriggern den Sleep blokiert)
+
+//In den folgenden Definitionen ist das PinMapping beschrieben: fur digtal IOs config[0]:config[9], fur analog Is config[10]:config[14].
+#define usedDio                 7       //Anzahl der verwendetetn DIOs
+#define usedAnalog				4		//Anzahl der verwendetetn analog In
 const uint8_t pinMapping[15]{0,1,17,18,19,9,16,0,0,0,2,3,4,5,0};
 //der SSPin macht noch Probleme Spi funktioniert dann nicht mehr!
 //const uint8_t pinMapping[15]{0,1,17,18,19,9,10,0,0,0,3,4,5,0,0};
@@ -222,9 +234,6 @@ void initVariables(void)
 	SensorPeriod = config[sensorDelay] * 10000;
 	WatchdogPeriod = config[watchdogDelay] * 5000;
 	
-	for (uint8_t i =0; i < usedDio; i++){
-		check_watchdog_req|= config[i] & (1<<wdreq);
-	}
 }
 
 void check_improveConfig(void){
@@ -883,10 +892,6 @@ void loop()
 
 	//Zum leeren des Buffers und senden aller Daten
 	write_buffer_str("","");
-	
-	if(check_watchdog_req){
-		//manage WD Ports
-	}
 	
 	if((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0)){
 		//Wir pruefen bis der Timeout abgelaufen ist ob noch eine Nachricht kommt
