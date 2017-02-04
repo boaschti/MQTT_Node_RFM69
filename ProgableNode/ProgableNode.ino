@@ -47,7 +47,8 @@ Modifications Needed:
 
 
 RFM69 rfm69;
-boolean BreakSleep = 0;
+
+
 
 //end Basic Defines ---------------------------------------------------------------------------------------------------
 
@@ -75,9 +76,8 @@ boolean BreakSleep = 0;
 	
 //ADC6 atmega voltage, to measure switch on Port 6 
 	#define circuitOn		6 //Port6
-	//#define atVolage		6 //ADC6
-	#define atVolage		3 //ADC6
-	
+	#define atVolage		6 //ADC6
+
 //Pins to Power up the Sensors
 	#define pumpPin			6
 	#define supplyPin		5
@@ -91,13 +91,15 @@ boolean BreakSleep = 0;
 
 unsigned long WatchdogPeriod;
 unsigned long SensorPeriod;
-
-
+volatile unsigned long WdTrigTimeStamp;
+unsigned long WdPinTimeout;
+volatile boolean SleepAlowed;
+boolean BreakSleep = 0;  //todo volatile ???
 
 //end Board Defines ---------------------------------------------------------------------------------------------------
 
 
-#define configSize 28
+#define configSize 31
 
 uint8_t eeConfig[configSize] EEMEM;
 uint8_t config[configSize];
@@ -168,7 +170,8 @@ uint8_t eeEncryptKey[16] EEMEM;
 #define  sleepTimeMulti         21    //sleepTime Multiplikator
 #define  sleepTime              22    //Sleep time in Sekunden * 8 sec, Wenn der Timer gesetzt ist wird auch die Batteriespannung gemessen
 #define  watchdogTimeout        23    //watchdog in * 8 sec, Zeit bis zum abfallen des Watchdogs und setzen der Pins auf den vorgegebenen Zustand (wdDefault). todo Der Sleep wird gesperrt wenn der Watchdog nicht abgefallen ist.
-#define  watchdogDelay          24    //watchdog in * 5 sec, Zeit bis zum nachsten senden eines Watchdogs (Nur wenn sleepTime == 0 konfiguriert ist oder der watchdog durch staendiges Nachtriggern den Sleep blokiert. todo Ansonsten wird der Watchdog sofort nach dem Aufwachen gesendet wenn watchdogDelay>0)
+#define  watchdogDelay          24    //watchdog in * 5 sec, Zeit bis zum nachsten senden eines Watchdogs (Nur wenn sleepTime == 0 konfiguriert ist oder der watchdog durch staendiges Nachtriggern den Sleep blokiert. Ansonsten wird der Watchdog sofort nach dem Aufwachen gesendet wenn watchdogDelay>0)
+
 #define  nodeId                 27    //NodeId dieses Sensors (einzigartig im Netzwerk)
 #define  networkId              28    //NetworkID dieses Sensors (alle gleich im Netzwerk)
 #define  gatewayId              29    //GatewayID an diese Addresse werden die Daten geschickt und es werden nur Daten von dieser Addresse beruecksichitgt. Todo Sollten Daten von einer Anderen Adresse kommen werden sie an das Gateway weitergeleitet.
@@ -233,6 +236,13 @@ void initVariables(void)
 	
 	SensorPeriod = config[sensorDelay] * 10000;
 	WatchdogPeriod = config[watchdogDelay] * 5000;
+	WdPinTimeout = config[watchdogTimeout] * 5000;
+	//Wir wollen den SLeep erst frei geben wenn der Watchdog abgelaufen ist
+	if (WdPinTimeout > 0){
+		SleepAlowed = FALSE;
+	}else{
+		SleepAlowed = TRUE;
+	}
 	
 }
 
@@ -254,8 +264,7 @@ void setupPins(void)
 	
 	//starte ADC for readPlaint oder readLDR oder readRain
 	if (config[math_analog2] || config[math_analog3] || config[math_analog4] || config[math_analog5]){
-		//analogReference(INTERNAL1V1);		
-		ADMUX |= (1<<REFS1) | (1<<REFS0);
+		analogReference(INTERNAL);		
 	}
 	
 	//Config DIOs
@@ -273,7 +282,6 @@ void setupPins(void)
 	//Wenn eine SleepTime configuriert ist gehen wir davon aus dass die Batteriespanung auch gelesen werden soll
 	if (config[sleepTime] > 0){
 		pinMode(circuitOn, OUTPUT);
-		pinMode(atVolage, INPUT);
 	}
 	
 	if (config[digitalSensors] & (1<<readHC05)){
@@ -311,16 +319,13 @@ void disableWd(void){
 void setup()
 {	
 	//disable Watchdog Timer
-	//disableWd();
-	//wdt_reset();
 	disableWd();
-		
-	//getJumper();
+
 	initVariables();
 	check_improveConfig();
 	setupPins();
+	//reset_wdPins(); 
 	
-  
 	//RFM69-------------------------------------------
 	//Reset
 
@@ -332,9 +337,9 @@ void setup()
 	rfm69.initialize(FREQUENCY, config[nodeId], config[networkId]);
 	//rfm69.initialize(FREQUENCY,NODEID,NETWORKID);
 	#ifdef IS_RFM69HW
-		rfm69.setHighPower(); //uncomment only for RFM69HW!
+		rfm69.setHighPower(); 
 	#endif
-	//rfm69.setPowerLevel(RFM_POWER_LEVEL);
+	rfm69.setPowerLevel(RFM_POWER_LEVEL);
 	//char temp[16];
 	//eeprom_read_block(temp, eeEncryptKey, 16);
 	//rfm69.encrypt(&temp[0]);
@@ -349,8 +354,9 @@ void setup()
 		dht.begin();
 	}
 	
+	//device UART
 	if (config[nodeControll] & (1<<uart)){
-		Serial.begin(SERIAL_BAUD);  //Begin serial communcation
+		Serial.begin(SERIAL_BAUD);
 	}
 	
 	//device DS18B20
@@ -460,7 +466,7 @@ void sendInt(char *name, uint8_t wert){
 	char temp[5];
 	itoa(wert, temp, 10);
 	write_buffer_str(name, &temp[0]);
-	write_buffer_str("",""); //sende DAten
+	write_buffer_str("",""); //sende Daten
 }
 
 boolean readMessage(char *message){
@@ -533,15 +539,17 @@ boolean readMessage(char *message){
 		*/
 		//zum schreiben einer festen config
 		if (strcmp(parts[i] , "w") == 0){
-			eeprom_write_byte(&eeConfig[atoi(parts[i + 1])], atoi(parts[i + 2]));
-			config[atoi(parts[i + 1])] = eeprom_read_byte(&eeConfig[atoi(parts[i + 1])]);
-			char temp[10] = "infoReg";
-			strncat(temp, parts[i+1],2);
-			sendInt(temp, config[atoi(parts[i + 1])]);
-			i++;
-			i++;
-			//Wir wollen in einem sauberen Zustand starten
-			resetCPU = TRUE;
+			if (atoi(parts[i + 1]) < configSize){
+				eeprom_write_byte(&eeConfig[atoi(parts[i + 1])], atoi(parts[i + 2]));
+				config[atoi(parts[i + 1])] = eeprom_read_byte(&eeConfig[atoi(parts[i + 1])]);
+				char temp[10] = "infoReg";
+				strncat(temp, parts[i+1],2);
+				sendInt(temp, config[atoi(parts[i + 1])]);
+				i++;
+				i++;
+				//Wir wollen in einem sauberen Zustand starten
+				resetCPU = TRUE;
+			}
 		}
 		//zum lesen der Config
 		if (strcmp(parts[i] , "r") == 0){
@@ -553,12 +561,23 @@ boolean readMessage(char *message){
 		}
 		//zum setzen von Ports
 		if (strcmp(parts[i] , "p") == 0){
+			//Wenn fuer diesen Pin ein Watchdog aktiv ist dann darf der sleep nich tausgefuehrt werden
+			if (config[atoi(parts[i + 1])] & (1<<wdReq)){
+				SleepAlowed = FALSE;	
+			}
 			if (strcmp(parts[i+2] , "1") == 0){
-				digitalWrite(pinMapping[atoi(parts[i + 1])],1);
+				digitalWrite(pinMapping[atoi(parts[i + 1])],HIGH);
 			}else{
-				digitalWrite(pinMapping[atoi(parts[i + 1])],0);
+				digitalWrite(pinMapping[atoi(parts[i + 1])],LOW);
 			}
 			//setze Bit "readInput" fuer den jeweiligen Port damit der Status zurueck gesendet wird
+			i++;
+			i++;
+		}
+		//den Watchdog nachtriggern
+		if (strcmp(parts[i] , "wd") == 0){
+			WdTrigTimeStamp = millis();
+			SleepAlowed = FALSE;		
 			i++;
 			i++;
 		}
@@ -595,10 +614,14 @@ void radio_Rx_loop(void) {
 		}
 		rfm69.receiveDone(); //put rfm69 in RX mode
 		if (senderId == config[gatewayId]){
-			char temp[5];
 			//ergaenze NULL Terminierung
 			data[dataLen] = 0;	
 			readMessage((const char *)data);
+		}else{
+			//Wir wollen Daten von einer anderen Node mit deren Namen versenden, wenn diese die Addresse als GATEWAYID eingestellt hat
+			//rfm69.initialize(FREQUENCY, senderId, config[networkId]);
+			rfm69.sendWithRetry(config[gatewayId], data, dataLen);
+			//rfm69.initialize(FREQUENCY, config[nodeId], config[networkId]);
 		}
 		digitalWrite(LED_1, LOW);
 
@@ -734,6 +757,7 @@ void read_DHT(boolean readImmediatelly = FALSE)
 }
 
 void read_HC05(void){
+	//cm = microseconds / 29 / 2;
 	write_buffer_str("funk", "HC05 read",TRUE);
 }
 
@@ -741,7 +765,7 @@ void read_Batterie(void){
 
 	uint8_t oldvalue;
 	
-	oldvalue = digitalRead(circuitOn);
+	oldvalue = digitalRead(circuitOn); //Wir merken uns den Zustand, da hier evtl auch die LED2 dran ist 
 	digitalWrite(circuitOn,HIGH);
 	delay(1);
 	char temp[10];
@@ -840,11 +864,25 @@ boolean read_inputs(void){
 	return 0;
 }
 
+void reset_wdPins(void){
+	
+	for (uint8_t i = 0; i<usedDio; i++){
+		if (config[i] & (1<<wdReq)){
+			if (config[i] & (1<<wdDefault)){
+				digitalWrite(pinMapping[i], HIGH);
+			}else{
+				digitalWrite(pinMapping[i], LOW);
+			}
+		}
+	}
+	
+}
+
 //---------------------------------------------------------------------------------------------
 void loop()
 {  
 	long timepassed;
-	boolean SleepAlowed = TRUE;
+
 	static long sensorTimeOld;
 	static long watchdogTimeOld;
 	static boolean sensorenLesen = TRUE;
@@ -892,43 +930,33 @@ void loop()
 
 	//Zum leeren des Buffers und senden aller Daten
 	write_buffer_str("","");
-	
-	if((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0)){
+
+
+	timepassed = millis() - WdTrigTimeStamp;
+	if (timepassed > WdPinTimeout){
+		WdTrigTimeStamp = millis();
+		reset_wdPins();
+		SleepAlowed = TRUE;
+	}
+
+	if((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0) && SleepAlowed){
 		//Wir pruefen bis der Timeout abgelaufen ist ob noch eine Nachricht kommt
 		for (uint16_t i = 0; i <= rxPollTime; i++){
 			radio_Rx_loop();
 			delay(1);
 		}
-		go_sleep();
-		sensorenLesen = TRUE; //Wir wollen, dass die Sensoren sofort gelesen werden
-		wdSenden = TRUE;
+		//Wenn der Watchdog im letzten Schritt nicht getriggert wurde dann rufen wir den Sleep auf
+		if (SleepAlowed){
+			//Zum leeren des Buffers und senden aller Daten
+			write_buffer_str("","");
+			go_sleep();
+			sensorenLesen = TRUE;	//Wir wollen, dass die Sensoren sofort gelesen werden
+			wdSenden = TRUE;		//Wir wollen, dass der Watchdog sofort gesendet wird
+		}
 	}
 	
 	digitalWrite(LED_3, HIGH);
 }//end loop
-
-
-//---------------------------------------------------------------------------------------------
-//---------------------------------------------------------------------------------------------
-float microsecondsToInches(long microseconds)
-{
-  // According to Parallax's datasheet for the PING))), there are
-  // 73.746 microseconds per inch (i.e. sound travels at 1130 feet per
-  // second).  This gives the distance travelled by the ping, outbound
-  // and return, so we divide by 2 to get the distance of the obstacle.
-  // See: http://www.parallax.com/dl/docs/prod/acc/28015-PING-v1.3.pdf
-  return microseconds / 74.0 / 2.0;
-}
-//---------------------------------------------------------------------------------------------
-//---------------------------------------------------------------------------------------------
-float microsecondsToCentimeters(long microseconds)
-{
-  // The speed of sound is 340 m/s or 29 microseconds per centimeter.
-  // The ping travels out and back, so to find the distance of the
-  // object we take half of the distance travelled.
-  return microseconds / 29 / 2;
-}
-
 
 ISR (PCINT0_vect)
 {
