@@ -606,7 +606,7 @@ void radio_Rx_loop(void) {
 		senderId = rfm69.SENDERID;
 		rssi = rfm69.RSSI;
 		dataLen = rfm69.DATALEN;
-		memcpy(data, (void *)rfm69.DATA, rfm69.DATALEN);
+		memcpy(data, (void *)rfm69.DATA, dataLen);
 		//check if sender req an ACK
 		if (rfm69.ACKRequested())
 		{
@@ -934,27 +934,35 @@ void loop()
 
 	timepassed = millis() - WdTrigTimeStamp;
 	if (timepassed > WdPinTimeout){
-		WdTrigTimeStamp = millis();
+		//WdTrigTimeStamp = millis();
 		reset_wdPins();
 		SleepAlowed = TRUE;
 	}
 
 	if((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0) && SleepAlowed){
+		//Wir senden eine dec11 damit das Gateway diese Node beim Broker subscibed und wir retained Messages erhalten
+		const char temp[] = {17};
+		rfm69.sendWithRetry(config[gatewayId], temp, sizeof(temp));
 		//Wir pruefen bis der Timeout abgelaufen ist ob noch eine Nachricht kommt
 		for (uint16_t i = 0; i <= rxPollTime; i++){
 			radio_Rx_loop();
 			delay(1);
 		}
+		const char temp2[] = {18};
+		rfm69.sendWithRetry(config[gatewayId], temp2, sizeof(temp2));
 		//Wenn der Watchdog im letzten Schritt nicht getriggert wurde dann rufen wir den Sleep auf
 		if (SleepAlowed){
-			//Zum leeren des Buffers und senden aller Daten
+			//Zum leeren des Buffers und senden aller Daten vor den Sleep
 			write_buffer_str("","");
 			go_sleep();
 			sensorenLesen = TRUE;	//Wir wollen, dass die Sensoren sofort gelesen werden
 			wdSenden = TRUE;		//Wir wollen, dass der Watchdog sofort gesendet wird
 		}
 	}
-	
+
+	//Zum leeren des Buffers und senden aller Daten
+	write_buffer_str("","");
+
 	digitalWrite(LED_3, HIGH);
 }//end loop
 
