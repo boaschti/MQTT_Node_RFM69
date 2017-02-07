@@ -18,6 +18,7 @@ Modifications Needed:
 #include <avr/sleep.h>
 //#include <stdint.h>
 #include <avr/wdt.h> 
+#include <RFM69registers.h>
 //#include <eeprom.h>
 
 //Standardkonfig wird uebernommen wenn JP_2 == GND oder funktion_pin0 == 255 (Komando "w_0":"255")
@@ -121,7 +122,7 @@ uint8_t eeEncryptKey[16] EEMEM;
 //Zum konfigurieren der analog Inputs muss man angeben wie der Wert verrechnet wird.
 //Bits der Variablen math_analog..
 #define readPlaint      0           //Arduino Pflanzen Feuchte Sensor (untested)
-#define readLDR         1           //Photo Widerstand 10k pullup
+#define readLDR         1           //Photo Widerstand 10k pulldown
 #define readRain        2           //Arduino Regen Sensor
 #define readRaw        3            //raw adc Wert
 
@@ -365,7 +366,6 @@ void setup()
 	}
 	
 	if (config[digitalSensors] & (1<<readBME)){
-		delay(1000);
 		if (!bme.begin()) {
 			const char errorString[] = "\"err\":\"BME Init\"";
 			rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
@@ -810,6 +810,7 @@ void go_sleep(void){
 	digitalWrite(LED_2, HIGH);
 	
 	rfm69.sleep();
+	//reg PRR und ADMUX
 	
 	wdt_set(WDTO_8S);
 
