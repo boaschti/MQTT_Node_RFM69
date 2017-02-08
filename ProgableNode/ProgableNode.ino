@@ -19,6 +19,7 @@ Modifications Needed:
 //#include <stdint.h>
 #include <avr/wdt.h> 
 #include <RFM69registers.h>
+
 //#include <eeprom.h>
 
 //Standardkonfig wird uebernommen wenn JP_2 == GND oder funktion_pin0 == 255 (Komando "w_0":"255")
@@ -565,6 +566,7 @@ boolean readMessage(char *message){
 			if (config[atoi(parts[i + 1])] & (1<<wdReq)){
 				SleepAlowed = FALSE;	
 			}
+			//todo Ports nicht setzen wenn Watchdog abgelaufen ist
 			if (strcmp(parts[i+2] , "1") == 0){
 				digitalWrite(pinMapping[atoi(parts[i + 1])],HIGH);
 			}else{
@@ -714,17 +716,16 @@ void read_Dallas(void)
 	//Nach dem einschalten des Sensors muss man min 1sec warten bis der Sensor richtige Daten liefert. Das muss der Aufrufer garantieren.
 
 	float temp_F;
-	char temp[5] = "DSt";
-		
-	for (uint8_t i = 0; i<2; i++){
-		char temp[5] = "Dst";
+	
+	for (uint8_t i = 0; i < dallas.getDeviceCount(); i++){
+		char temp[7] = "Dt";
 		temp_F = dallas.getTempCByIndex(i);
 		//dtostrf(floatVar, minStringWidthIncDecimalPoint, numVarsAfterDecimal, charBuf);
 		char wert[6];
 		dtostrf(temp_F, 3, 1, wert);
-		char tempindex[3];
-		itoa(i, tempindex, 10);
-		strncat(temp,tempindex,2);
+		char *dsAddr;
+		dallas.getAddress(dsAddr, i);
+		strncat(temp,dsAddr,3); //Wir wollen nur 3 Stellen der Addresse senden
 		write_buffer_str(&temp[0], &wert[0]);
 
 	}
