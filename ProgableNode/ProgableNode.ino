@@ -266,7 +266,8 @@ void setupPins(void)
 	
 	//starte ADC for readPlaint oder readLDR oder readRain
 	if (config[math_analog2] || config[math_analog3] || config[math_analog4] || config[math_analog5]){
-		analogReference(INTERNAL);		
+		//analogReference(INTERNAL);
+		analogReference(EXTERNAL);
 	}
 	
 	//Config DIOs
@@ -762,24 +763,31 @@ void read_HC05(void){
 	write_buffer_str("funk", "HC05 read",TRUE);
 }
 
-void read_Batterie(void){
+uint16_t read_Batterie(boolean readOnly = false){
 
-	uint8_t oldvalue;
-	
-	oldvalue = digitalRead(circuitOn); //Wir merken uns den Zustand, da hier evtl auch die LED2 dran ist 
-	digitalWrite(circuitOn,HIGH);
-	delay(1);
-	char temp[10];
-	itoa(analogRead(atVolage), temp, 10);
-	write_buffer_str("batt" , temp);
-	digitalWrite(circuitOn,oldvalue);
+	uint16_t result;   // Read 1.1V reference gegen AVcc
+	ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1);
+	delay(2);
+	ADCSRA |= _BV(ADSC);
+	while (bit_is_set(ADCSRA,ADSC));
+	result = ADCL;
+	result |= ADCH<<8;
+	result = 1024 * 11 / result;		//1024 * Vbandgap(1,1V) / ADC_Wert
+	result = result * 103;				//+3%
+	//Wir brauchen die Funktion auch für interne Zwecke
+	if (!readOnly){
+		char temp[10];
+		itoa(result, temp, 10);
+		write_buffer_str("batt" , temp);
+	}
+	return result;
 }
 
 void read_analog(void){
 	
 	for (uint8_t i = 10; i < (usedAnalog + 10); i++){
 		if (config[i] != 0){
-			char temp[6] = "Ain";
+			char temp[6] = "Ai";
 			char tempindex[3];
 			char wert[7];
 			itoa(pinMapping[i], tempindex, 10);
