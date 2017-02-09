@@ -241,9 +241,9 @@ void initVariables(void)
 	WdPinTimeout = config[watchdogTimeout] * 5000;
 	//Wir wollen den SLeep erst frei geben wenn der Watchdog abgelaufen ist
 	if (WdPinTimeout > 0){
-		SleepAlowed = FALSE;
+		SleepAlowed = false;
 	}else{
-		SleepAlowed = TRUE;
+		SleepAlowed = true;
 	}
 	
 }
@@ -378,11 +378,11 @@ void setup()
 	rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
 }
 
- boolean write_buffer_str(char *name, char *wert, boolean strWert = FALSE )
+ boolean write_buffer_str(char *name, char *wert, boolean strWert = false )
 {
 	/*
 	write_buffer_str("abc","123") -> Es wird ein String '"abc":123' in den Buffer geschrieben
-	write_buffer_str("abc","123",FALSE) -> Es wird ein String '"abc":"def"' in den Buffer geschrieben	
+	write_buffer_str("abc","123",false) -> Es wird ein String '"abc":"def"' in den Buffer geschrieben	
 	write_buffer_str("","") -> Es werden alle Daten gesendet und der Pointer auf 0 gesetzt
 	
 	Es wird immer ueberprueft ob die maxixmale laenge von 61Bytes (begrenzt vom RFM Modul) ueberschritten wird 
@@ -398,7 +398,7 @@ void setup()
 	uint8_t wertLength = strlen(wert);
 	uint8_t messageOverhead;
 	
-	if (strWert == TRUE){
+	if (strWert == true){
 		messageOverhead = messageOverheadDec;
 	}else{
 		messageOverhead = messageOverheadStr;
@@ -416,7 +416,7 @@ void setup()
 				if (!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer)){
 					//Ein Fehler ist aufgetreten wir merken uns den Bufferinhalt
 					radio_Rx_loop(); //RFM->RXMode
-					return FALSE;
+					return false;
 				}else{
 					sendBufferPointer = 0;
 				}
@@ -435,7 +435,7 @@ void setup()
 
 			sendBuffer[sendBufferPointer++] = '\"';
 			sendBuffer[sendBufferPointer++] = ':';
-			if (strWert == TRUE){
+			if (strWert == true){
 				sendBuffer[sendBufferPointer++] = '\"';
 			}
 
@@ -444,7 +444,7 @@ void setup()
 				sendBuffer[sendBufferPointer++] = ((char*)(wert))[loop];
 			}
 
-			if (strWert == TRUE){
+			if (strWert == true){
 				sendBuffer[sendBufferPointer++] = '\"';
 			}
 			sendBuffer[sendBufferPointer++] = ',';
@@ -456,11 +456,11 @@ void setup()
 		const char errorString[] = "\"err\":\"Message to long\"";
 		rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
 		radio_Rx_loop(); //RFM->RXMode
-		return FALSE;
+		return false;
 	}
 	
 	radio_Rx_loop(); //RFM->RXMode
-	return TRUE;
+	return true;
 }
 
 void sendInt(char *name, uint8_t wert){
@@ -518,24 +518,24 @@ boolean readMessage(char *message){
 	//parts[1]
 	// last part parts[i]
 	/*
-		write_buffer_str("part0", parts[0], TRUE);
-		write_buffer_str("part1", parts[1], FALSE);
-		write_buffer_str("part2", parts[2], FALSE);
-		write_buffer_str("part3", parts[3], FALSE);
-		write_buffer_str("part4", parts[4], FALSE);
-		write_buffer_str("part5", parts[5], FALSE);
-		write_buffer_str("part6", parts[6], FALSE);
-		write_buffer_str("part7", parts[7], FALSE);
-		write_buffer_str("part8", parts[8], FALSE);
-		write_buffer_str("part9", parts[9], FALSE);
+		write_buffer_str("part0", parts[0], true);
+		write_buffer_str("part1", parts[1], false);
+		write_buffer_str("part2", parts[2], false);
+		write_buffer_str("part3", parts[3], false);
+		write_buffer_str("part4", parts[4], false);
+		write_buffer_str("part5", parts[5], false);
+		write_buffer_str("part6", parts[6], false);
+		write_buffer_str("part7", parts[7], false);
+		write_buffer_str("part8", parts[8], false);
+		write_buffer_str("part9", parts[9], false);
 		rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferLength);
 		*/
 	uint8_t listLen = i;
-	boolean resetCPU = FALSE;
+	boolean resetCPU = false;
 	
 	for (uint8_t i=0; i<=listLen; i++){
 		/*
-		write_buffer_str("parse", parts[i], TRUE);
+		write_buffer_str("parse", parts[i], true);
 		rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferLength);
 		delay(100);
 		*/
@@ -550,7 +550,7 @@ boolean readMessage(char *message){
 				i++;
 				i++;
 				//Wir wollen in einem sauberen Zustand starten
-				resetCPU = TRUE;
+				resetCPU = true;
 			}
 		}
 		//zum lesen der Config
@@ -565,7 +565,7 @@ boolean readMessage(char *message){
 		if (strcmp(parts[i] , "p") == 0){
 			//Wenn fuer diesen Pin ein Watchdog aktiv ist dann darf der sleep nich tausgefuehrt werden
 			if (config[atoi(parts[i + 1])] & (1<<wdReq)){
-				SleepAlowed = FALSE;	
+				SleepAlowed = false;	
 			}
 			//todo Ports nicht setzen wenn Watchdog abgelaufen ist
 			if (strcmp(parts[i+2] , "1") == 0){
@@ -580,13 +580,13 @@ boolean readMessage(char *message){
 		//den Watchdog nachtriggern
 		if (strcmp(parts[i] , "wd") == 0){
 			WdTrigTimeStamp = millis();
-			SleepAlowed = FALSE;		
+			SleepAlowed = false;		
 			i++;
 			i++;
 		}
 	}
 	if (resetCPU){
-		write_buffer_str("info", "restart_Node", TRUE);
+		write_buffer_str("info", "restart_Node", true);
 		write_buffer_str("","");	
 		WDTCSR |= (1<<WDCE) | (1<<WDE);
 		WDTCSR |= (1<<WDE) | (1<<WDP1) | (1<<WDP2);
@@ -648,25 +648,25 @@ void testsend(void)
 	strcat(string, ",");
 	
 	
-	//ltoa(rfm69.readRSSI(FALSE), tempstring, 10);
+	//ltoa(rfm69.readRSSI(false), tempstring, 10);
 	//strcat(string, tempstring);
 	//ultoa(deltaMillis, tempstring, 10);
 	//strcat(string, tempstring);
 	
 	ultoa(deltaMillis, string+strlen(string), 10);
 	strcat(string, ",");
-	ltoa(rfm69.readRSSI(FALSE), string+strlen(string), 10); 
+	ltoa(rfm69.readRSSI(false), string+strlen(string), 10); 
 */		
 		
 		
 		
 	int16_t test1 = 1876;
 	float test2 = 1.7551;
-	write_buffer_str("wert_1", "bla",TRUE);
-	write_buffer_str("wert_2", "testvariable_1_xxx_yyyy_",TRUE);
-	write_buffer_str("message", "message_m",TRUE);
+	write_buffer_str("wert_1", "bla",true);
+	write_buffer_str("wert_2", "testvariable_1_xxx_yyyy_",true);
+	write_buffer_str("message", "message_m",true);
 	//String Temp = String(test2,3);
-	//write_buffer_str("test1", &Temp[0], FALSE);
+	//write_buffer_str("test1", &Temp[0], false);
 	//write_buffer_str("test1", ltoa(test1, strlen(test1),10));
 	//if(!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferLength));
 	if(0)
@@ -675,8 +675,8 @@ void testsend(void)
 		delay(10);
 		digitalWrite(LED_2, LOW);
 	}
-	write_buffer_str("wert_xy", "testabc",TRUE);
-	write_buffer_str("message", "message2_message2_message2_message2_message2_message2_message2_message2_message2_message2_message2",TRUE);
+	write_buffer_str("wert_xy", "testabc",true);
+	write_buffer_str("message", "message2_message2_message2_message2_message2_message2_message2_message2_message2_message2_message2",true);
 	if(!write_buffer_str("","")){
 		digitalWrite(LED_2, HIGH);
 		delay(10);
@@ -733,7 +733,7 @@ void read_Dallas(void)
 }
 
 
-void read_DHT(boolean readImmediatelly = FALSE)
+void read_DHT(boolean readImmediatelly = false)
 {
 	
 	//Nach dem einschalten des Sensors muss man min 1sec warten bis der Sensor richtige Daten liefert. Das muss der Aufrufer garantieren.
@@ -745,7 +745,7 @@ void read_DHT(boolean readImmediatelly = FALSE)
 		
 	float temp_F;
 	if (isnan(t) || isnan(h)) {
-		write_buffer_str("err", "DHT_read",TRUE);
+		write_buffer_str("err", "DHT_read",true);
 		write_buffer_str("","");
 	} else {
 		char Temp[10];
@@ -760,22 +760,23 @@ void read_DHT(boolean readImmediatelly = FALSE)
 
 void read_HC05(void){
 	//cm = microseconds / 29 / 2;
-	write_buffer_str("funk", "HC05 read",TRUE);
+	write_buffer_str("funk", "HC05 read",true);
 }
 
-uint16_t read_Batterie(boolean readOnly = false){
+uint16_t read_Vcc(boolean sendWert = true){
+	
+	// Lese 1.1V reference gegen AVcc
 
-	uint16_t result;   // Read 1.1V reference gegen AVcc
+	uint16_t result;   
 	ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1);
 	delay(2);
 	ADCSRA |= _BV(ADSC);
 	while (bit_is_set(ADCSRA,ADSC));
 	result = ADCL;
-	result |= ADCH<<8;
-	result = 1024 * 11 / result;		//1024 * Vbandgap(1,1V) / ADC_Wert
-	result = result * 103;				//+3%
-	//Wir brauchen die Funktion auch für interne Zwecke
-	if (!readOnly){
+	result |= ADCH<<8;	
+	result = 1126400 / result; //1024 * Vbandgap(1100mV) / ADC_Wert
+	//Wir brauchen die Funktion auch fuer interne Zwecke
+	if (sendWert){
 		char temp[10];
 		itoa(result, temp, 10);
 		write_buffer_str("batt" , temp);
@@ -799,6 +800,9 @@ void read_analog(void){
 			}else if (config[i] & (1<<readRain)){
 				
 			}else if (config[i] & (1<<readLDR)){
+				// GND----[_10K_]--+--LDR----VDD
+				//                 |________ADin
+				//Wir müssen nichts berechnen
 				
 			}else if (config[i] & (1<<readRaw)){
 				//Wir muessen nichts berechnen
@@ -814,7 +818,7 @@ void read_analog(void){
 
 void go_sleep(void){
 	
-	BreakSleep = FALSE;
+	BreakSleep = false;
 
 	digitalWrite(LED_2, HIGH);
 	
@@ -847,7 +851,7 @@ void go_sleep(void){
 }
 
 boolean read_inputs(void){
-	static boolean readAllInputs = TRUE;
+	static boolean readAllInputs = true;
 	static uint8_t lastPinState = 0;
 	
 	//#define bit_write(p,m,c) (c ? bit_set(p,m) : bit_clear(p,m))
@@ -870,7 +874,7 @@ boolean read_inputs(void){
 			}
 		}
 	}	
-	readAllInputs = FALSE;
+	readAllInputs = false;
 	return 0;
 }
 
@@ -895,23 +899,23 @@ void loop()
 
 	static long sensorTimeOld;
 	static long watchdogTimeOld;
-	static boolean sensorenLesen = TRUE;
-	static boolean wdSenden = FALSE;
+	static boolean sensorenLesen = true;
+	static boolean wdSenden = false;
 	
 	digitalWrite(LED_3, LOW);
 
 	timepassed = millis() - sensorTimeOld;
 	//Wir wollen die Sensoren abfragen wenn die Pausezeit vorbei ist, wenn sensorenLesen gesetzt ist, dann lesen wir sofort
-	if ((timepassed > SensorPeriod) || (sensorenLesen == TRUE)){
+	if ((timepassed > SensorPeriod) || (sensorenLesen == true)){
 		//wartezeit bis die Sensoren gelesen werden koennen (DS18b20) sensorenLesen ist nur gesetzt wenn wir aus dem Sleep kommen oder die CPU neu gestartet wurde
-		if ((sensorenLesen == TRUE) && (config[digitalSensors] & (1<<readDS18))){ 
+		if ((sensorenLesen == true) && (config[digitalSensors] & (1<<readDS18))){ 
 			delay(1000);
 		}
-		sensorenLesen = FALSE;
+		sensorenLesen = false;
 		sensorTimeOld = millis();
 		//Wenn eine SleepTime configuriert ist gehen wir davon aus dass die Batteriespanung auch gelesen werden soll
 		if (config[sleepTime] > 0){
-			read_Batterie();
+			read_Vcc();
 		}
 		if (config[digitalSensors] & (1<<readDS18)){	
 			read_Dallas();
@@ -933,9 +937,9 @@ void loop()
 	
 	//Watchdog
 	timepassed = millis() - watchdogTimeOld;
-	if (((timepassed > WatchdogPeriod) || (wdSenden == TRUE)) && (WatchdogPeriod > 0)){
+	if (((timepassed > WatchdogPeriod) || (wdSenden == true)) && (WatchdogPeriod > 0)){
 		watchdogTimeOld = millis();
-		write_buffer_str("wd", "WD_MSG",TRUE);
+		write_buffer_str("wd", "WD_MSG",true);
 	}
 
 	//Zum leeren des Buffers und senden aller Daten
@@ -946,7 +950,7 @@ void loop()
 	if (timepassed > WdPinTimeout){
 		//WdTrigTimeStamp = millis();
 		reset_wdPins();
-		SleepAlowed = TRUE;
+		SleepAlowed = true;
 	}
 
 	if((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0) && SleepAlowed){
@@ -965,8 +969,8 @@ void loop()
 			//Zum leeren des Buffers und senden aller Daten vor den Sleep
 			write_buffer_str("","");
 			go_sleep();
-			sensorenLesen = TRUE;	//Wir wollen, dass die Sensoren sofort gelesen werden
-			wdSenden = TRUE;		//Wir wollen, dass der Watchdog sofort gesendet wird
+			sensorenLesen = true;	//Wir wollen, dass die Sensoren sofort gelesen werden
+			wdSenden = true;		//Wir wollen, dass der Watchdog sofort gesendet wird
 		}
 	}
 
@@ -980,21 +984,21 @@ ISR (PCINT0_vect)
 {
 	sleep_disable();        // first thing after waking from sleep:
 	read_inputs();
-	BreakSleep = TRUE;
+	BreakSleep = true;
 }
 
 ISR (PCINT1_vect)
 {
 	sleep_disable();        // first thing after waking from sleep:
 	read_inputs();
-	BreakSleep = TRUE;
+	BreakSleep = true;
 }
 
 ISR (PCINT2_vect)
 {
 	sleep_disable();        // first thing after waking from sleep:
 	read_inputs();
-	BreakSleep = TRUE;
+	BreakSleep = true;
 }
 
 ISR (WDT_vect)
