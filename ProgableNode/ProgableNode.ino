@@ -634,56 +634,6 @@ void radio_Rx_loop(void) {
 	}
 }
 
-
-void testsend(void)
-{
-
-
-/*
-	char string[50] ;
-	char tempstring[33];
-	strcpy(string, "\"Hier ist der Node");
-	strcat(string, " Blub\":");
-	strcat(string, startMillis);
-	strcat(string, ",");
-	
-	
-	//ltoa(rfm69.readRSSI(false), tempstring, 10);
-	//strcat(string, tempstring);
-	//ultoa(deltaMillis, tempstring, 10);
-	//strcat(string, tempstring);
-	
-	ultoa(deltaMillis, string+strlen(string), 10);
-	strcat(string, ",");
-	ltoa(rfm69.readRSSI(false), string+strlen(string), 10); 
-*/		
-		
-		
-		
-	int16_t test1 = 1876;
-	float test2 = 1.7551;
-	write_buffer_str("wert_1", "bla",true);
-	write_buffer_str("wert_2", "testvariable_1_xxx_yyyy_",true);
-	write_buffer_str("message", "message_m",true);
-	//String Temp = String(test2,3);
-	//write_buffer_str("test1", &Temp[0], false);
-	//write_buffer_str("test1", ltoa(test1, strlen(test1),10));
-	//if(!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferLength));
-	if(0)
-	{
-		digitalWrite(LED_2, HIGH);
-		delay(10);
-		digitalWrite(LED_2, LOW);
-	}
-	write_buffer_str("wert_xy", "testabc",true);
-	write_buffer_str("message", "message2_message2_message2_message2_message2_message2_message2_message2_message2_message2_message2",true);
-	if(!write_buffer_str("","")){
-		digitalWrite(LED_2, HIGH);
-		delay(10);
-		digitalWrite(LED_2, LOW);
-	}
-}
-
 void read_bme(void){
 	
 	float temp_F;
@@ -802,7 +752,7 @@ void read_analog(void){
 			}else if (config[i] & (1<<readLDR)){
 				// GND----[_10K_]--+--LDR----VDD
 				//                 |________ADin
-				//Wir müssen nichts berechnen
+				//Wir muessen nichts berechnen
 				
 			}else if (config[i] & (1<<readRaw)){
 				//Wir muessen nichts berechnen
