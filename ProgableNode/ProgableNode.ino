@@ -770,10 +770,10 @@ void go_sleep(void){
 	
 	BreakSleep = false;
 
-	digitalWrite(LED_2, HIGH);
+	digitalWrite(LED_2, LOW);
 	
 	rfm69.sleep();
-	//reg PRR und ADMUX
+	//todo? reg PRR und ADMUX
 	
 	wdt_set(WDTO_8S);
 
@@ -795,9 +795,7 @@ void go_sleep(void){
 
 	//rfm69.receiveDone();	//set RFM to RX
 	
-    //detachInterrupt(0);     // disables interrupt 0 on pin 2 so the
-	
-	digitalWrite(LED_2, LOW);
+	digitalWrite(LED_2, HIGH);
 }
 
 boolean read_inputs(void){
@@ -903,6 +901,8 @@ void loop()
 		SleepAlowed = true;
 	}
 
+
+
 	if((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0) && SleepAlowed){
 		//Wir senden eine dec11 damit das Gateway diese Node beim Broker subscibed und wir retained Messages erhalten
 		const char temp[] = {17};
@@ -918,6 +918,7 @@ void loop()
 		if (SleepAlowed){
 			//Zum leeren des Buffers und senden aller Daten vor den Sleep
 			write_buffer_str("","");
+			digitalWrite(LED_3, LOW);
 			go_sleep();
 			sensorenLesen = true;	//Wir wollen, dass die Sensoren sofort gelesen werden
 			wdSenden = true;		//Wir wollen, dass der Watchdog sofort gesendet wird
@@ -926,8 +927,8 @@ void loop()
 
 	//Zum leeren des Buffers und senden aller Daten
 	write_buffer_str("","");
-
 	digitalWrite(LED_3, HIGH);
+	
 }//end loop
 
 ISR (PCINT0_vect)
