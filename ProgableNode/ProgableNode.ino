@@ -61,6 +61,10 @@ RFM69 rfm69;
 #include <DallasTemperature.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
+#include <U8x8lib.h>
+
+//U8X8_SSD1306_64X48_ER_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE);  
+U8X8_SSD1306_128X64_NONAME_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE);  
 
 //device DHT11 Temperature/Humidity
     #define DHTPIN 16     // what pin we're connected to
@@ -139,6 +143,8 @@ uint8_t eeEncryptKey[16] EEMEM;
 #define writeWsLed      0           //Max 255 ws2812b LEDs
 #define uart			1
 #define dmx             2           //Wenn ein DMX Signal ausgegeben werden soll (Quartz erforderlich)
+#define ssd1306_64x48   3
+#define ssd1306_128x64  4
 
 //Zum einstellen des Verhaltens der Node:
 //Bits der Variable nodeControll
@@ -174,6 +180,7 @@ uint8_t eeEncryptKey[16] EEMEM;
 #define  watchdogTimeout        23    //watchdog in * 8 sec, Zeit bis zum abfallen des Watchdogs und setzen der Pins auf den vorgegebenen Zustand (wdDefault). todo Der Sleep wird gesperrt wenn der Watchdog nicht abgefallen ist.
 #define  watchdogDelay          24    //watchdog in * 5 sec, Zeit bis zum nachsten senden eines Watchdogs (Nur wenn sleepTime == 0 konfiguriert ist oder der watchdog durch staendiges Nachtriggern den Sleep blokiert. Ansonsten wird der Watchdog sofort nach dem Aufwachen gesendet wenn watchdogDelay>0)
 
+#define  contrast               26
 #define  nodeId                 27    //NodeId dieses Sensors (einzigartig im Netzwerk)
 #define  networkId              28    //NetworkID dieses Sensors (alle gleich im Netzwerk)
 #define  gatewayId              29    //GatewayID an diese Addresse werden die Daten geschickt und es werden nur Daten von dieser Addresse beruecksichitgt. Todo Sollten Daten von einer Anderen Adresse kommen werden sie an das Gateway weitergeleitet.
@@ -222,9 +229,10 @@ void initVariables(void)
     //if ((eeprom_read_byte(&eeConfig[funktion_pin0]) == 255) || !getJumper()){
     if (eeprom_read_byte(&eeConfig[funktion_pin0]) == 255){
     //if (1){
-        for (uint8_t i = 0; i < configSize-4; i++){
+        for (uint8_t i = 0; i < configSize-5; i++){
             eeprom_write_byte(&eeConfig[i], 0);
         }
+        eeprom_write_byte(&eeConfig[contrast], 255);        
         eeprom_write_byte(&eeConfig[nodeId], DEFAULTNODEID);
         eeprom_write_byte(&eeConfig[networkId], DEFAULTNETWORKID);
         eeprom_write_byte(&eeConfig[gatewayId], DEFAULTGATEWAYID);
@@ -352,6 +360,17 @@ void setup()
   
     //--------------------------------------
     
+    //ssd1306 Display
+    //u8x8.setI2CAddress(0x3c);
+    if ((config[digitalOut] & (1<<ssd1306_128x64)) || (config[digitalOut] & (1<<ssd1306_64x48))){
+        u8x8.begin();
+        u8x8.setPowerSave(0);
+        u8x8.setContrast(config[contrast]);
+        u8x8.setFont(u8x8_font_pxplusibmcga_r);
+        u8x8.drawString(4,2,"Node");
+        u8x8.drawString(4,3,"started");
+    }
+
     //device DHT
     if (config[digitalSensors] & (1<<readDHT)){
         dht.begin();
@@ -374,7 +393,7 @@ void setup()
         }
     }
 
-    const char errorString[] = "\"info\":\"started_Node\"";
+    const char errorString[] = "\"info\":\"setup_Node\"";
     rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
 }
 
@@ -550,7 +569,12 @@ boolean readMessage(char *message){
                 i++;
                 i++;
                 //Wir wollen in einem sauberen Zustand starten
-                resetCPU = true;
+                //todo if funktoniert so nicht
+                if ((atoi(parts[i + 1]) != contrast)){
+                    resetCPU = true;
+                }else{
+                    setup();
+                }
             }
         }
         //zum lesen der Config
@@ -576,6 +600,15 @@ boolean readMessage(char *message){
             //setze Bit "readInput" fuer den jeweiligen Port damit der Status zurueck gesendet wird
             i++;
             i++;
+        }
+        if (strcmp(parts[i] , "d") == 0){
+            if (config[digitalOut] & (1<<ssd1306_64x48)){
+                u8x8.drawString(4, (atoi(parts[i + 1])+2), "        ");
+                u8x8.drawString(4, (atoi(parts[i + 1])+2), parts[i + 2]);
+            }else if (config[digitalOut] & (1<<ssd1306_128x64)){
+                u8x8.drawString(0, atoi(parts[i + 1]), "            ");
+                u8x8.drawString(0, atoi(parts[i + 1]), parts[i + 2]);
+            }
         }
         //den Watchdog nachtriggern
         if (strcmp(parts[i] , "wd") == 0){
@@ -773,6 +806,8 @@ void go_sleep(void){
     digitalWrite(LED_2, LOW);
     
     rfm69.sleep();
+    
+    u8x8.setPowerSave(1);
     //todo? reg PRR und ADMUX
     
     wdt_set(WDTO_8S);
@@ -795,6 +830,7 @@ void go_sleep(void){
 
     //rfm69.receiveDone();	//set RFM to RX
     
+    u8x8.setPowerSave(0);
     digitalWrite(LED_2, HIGH);
 }
 
