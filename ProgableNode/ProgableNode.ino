@@ -16,11 +16,8 @@ Modifications Needed:
 #include <RFM69.h>
 #include <SPI.h>
 #include <avr/sleep.h>
-//#include <stdint.h>
 #include <avr/wdt.h> 
 #include <RFM69registers.h>
-
-//#include <eeprom.h>
 
 //Standardkonfig wird uebernommen wenn JP_2 == GND oder funktion_pin0 == 255 (Komando "w_0":"255")
 #define DEFAULTNODEID        250    //unique for each node on same network
@@ -117,12 +114,12 @@ uint8_t eeEncryptKey[16] EEMEM;
 //Es koennen folgende  Eigenschaften fuer die Pins eingestellt werden:
 //Bits der Variablen funktion_pin..
 #define in_out			0		    //DDR wie im Atmel Datenblatt 0=in
-#define port            1           //PORT wie im Atmel Datenblatt 1=High(outputMode)/1=Pullup(inputMode)
-#define pcInt           2           //Der Pin loest einen Interrupt aus (aufwachen aus dem Sleep)
-#define pwm             3           //Der Pin gibt ein software PWM Signal aus
+#define port            1           //PORT wie im Atmel Datenblatt 1=High(im outputMode)/1=Pullup(im inputMode)
+#define pcInt           2           //Der Pin loest einen Interrupt aus (aufwachen aus dem Sleep und sofortiges lesen des Pins wenn readInput gesetzt ist)
+#define pwm             3           //todo Der Pin gibt ein software PWM Signal aus
 #define wdDefault       4           //Zustand in den der watchdog faellt wenn er nicht getriggert wird (nur wenn kein sleep aktiv ist!)
 #define wdReq           5           //Watchdog fuer diesen Pin aktivieren
-#define readInput       6           //Ruecklesen des Pins und senden der Daten (polling)
+#define readInput       6           //Ruecklesen des Pins und senden der Daten (polling fuer Interrupt pcInt setzen)
 
 //Zum konfigurieren der analog Inputs muss man angeben wie der Wert verrechnet wird.
 //Bits der Variablen math_analog..
@@ -149,14 +146,15 @@ uint8_t eeEncryptKey[16] EEMEM;
 //Zum einstellen des Verhaltens der Node:
 //Bits der Variable nodeControll
 #define sensorPower			0       //der supplyPin (5) wird zum Versorgen von Sensoren und fuer die LED2 verwendet. Wenn 0 dann nur fue die LED2.
-#define pumpSensorVoltage   1		//der pumpPin (6) wird zum verdoppeln der Betriebsspannnung fuer Sensoren verwendet. Sowie fuer die LED1. Wenn 0 dann nur fue die LED1.
-
+#define pumpSensorVoltage   1		//der pumpPin (6) wird zum verdoppeln der Betriebsspannnung fuer Sensoren verwendet indem ein Kondensator aufgeladen wird. Sowie fuer die LED1. Wenn 0 dann nur fue die LED1.
+#define sensorPowerSleep    2       //die Sensor versorgung wird waehrend dem Sleep nicht abgeschaltet. Wenn pumpSensorVoltage gesetzt ist wird alle 8sec der Kondensator erneut aufgeladen.
 
 //Die folgenden Definitionen zeigen die Stelle im BYTE Array wo die Einstellungen gespeichert sind:
 //Man kann direkt auf das ARRAY per Funk zugreifen die Werte sind immer dezimal:
 //"w_5":"3" -> Zum Schreiben einer 3 an Stelle 5
 //"r_5":"3" -> Zum Lesen der Stelle 5 (die "3" wird gebraucht allerdings ignoriert)
 //"p_5":"1" -> Zum setzen und ruecksetzen des Ports 5 (funktion_pin..)
+//"d_5":"ABC123" -> Zum schreiben eines Strings auf das Display. 5 ist die Zeilen Nummer
 
 //Bytes des Config Arrays
 #define  funktion_pin0          0
@@ -367,8 +365,15 @@ void setup()
         u8x8.setPowerSave(0);
         u8x8.setContrast(config[contrast]);
         u8x8.setFont(u8x8_font_pxplusibmcga_r);
-        u8x8.drawString(4,2,"Node");
-        u8x8.drawString(4,3,"started");
+        char temp[10] = "Id   ";
+        char wert[4];
+        itoa(config[nodeId], wert, 10);
+        strncat(temp, wert, 3);
+        u8x8.drawString(4,2,temp);
+        strcpy(temp, "Net  " );
+        itoa(config[networkId], wert, 10);
+        strncat(temp, wert, 3);        
+        u8x8.drawString(4,3,temp);    
     }
 
     //device DHT
@@ -807,9 +812,12 @@ void go_sleep(void){
     
     rfm69.sleep();
     
-    u8x8.setPowerSave(1);
+    if ((config[digitalOut] & (1<<ssd1306_128x64)) || (config[digitalOut] & (1<<ssd1306_64x48))){
+        u8x8.setPowerSave(1);
+    }
     //todo? reg PRR und ADMUX
     
+    //Wir schalten den Watchdog ein. 8sec und Interrupt damit wir wieder aufwachen
     wdt_set(WDTO_8S);
 
     for (uint16_t i = 0; i < (config[sleepTime] * config[sleepTimeMulti]); i++){
@@ -829,8 +837,10 @@ void go_sleep(void){
     disableWd();
 
     //rfm69.receiveDone();	//set RFM to RX
+    if ((config[digitalOut] & (1<<ssd1306_128x64)) || (config[digitalOut] & (1<<ssd1306_64x48))){
+        u8x8.setPowerSave(0);
+    }
     
-    u8x8.setPowerSave(0);
     digitalWrite(LED_2, HIGH);
 }
 
