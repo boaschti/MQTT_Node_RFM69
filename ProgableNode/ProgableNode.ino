@@ -110,8 +110,9 @@ uint8_t eeEncryptKey[16] EEMEM;
 
 
 //Folgende Definitionen zeigen die Bit stellen der einstellbaren Funktionen.
-
+//Die Standard Einstellungen koennen mit dem setzen von config[0] hergestellt werden.
 //Es koennen folgende  Eigenschaften fuer die Pins eingestellt werden:
+
 //Bits der Variablen funktion_pin..
 #define in_out			0		    //DDR wie im Atmel Datenblatt 0=in
 #define port            1           //PORT wie im Atmel Datenblatt 1=High(im outputMode)/1=Pullup(im inputMode)
@@ -126,7 +127,7 @@ uint8_t eeEncryptKey[16] EEMEM;
 #define readPlaint      0           //Arduino Pflanzen Feuchte Sensor (untested)
 #define readLDR         1           //Photo Widerstand 10k pulldown
 #define readRain        2           //Arduino Regen Sensor
-#define readRaw        3            //raw adc Wert
+#define readRaw         3           //raw adc Wert
 
 //Zum konfigurieren der digitalen Sensoren muss man nur angeben welche Sensoren gelesen werden sollen.
 //Bits der Variable digitalsensors
@@ -224,8 +225,8 @@ void initVariables(void)
     //Alle Pins auf Eingang
     //keine Sensoren aktiv
     //es kann bei der ersten Inbetriebnahme zu Problemen (haengt beim Sensor lesen) kommen wenn diese Variable nicht auf 255 steht
-    //if ((eeprom_read_byte(&eeConfig[funktion_pin0]) == 255) || !getJumper()){
-    if (eeprom_read_byte(&eeConfig[funktion_pin0]) == 255){
+    //if ((eeprom_read_byte(&eeConfig[funktion_pin0]) == 255) || (getJumper() == 0){
+    if (eeprom_read_byte(&eeConfig[0]) == 255){
     //if (1){
         for (uint8_t i = 0; i < configSize-5; i++){
             eeprom_write_byte(&eeConfig[i], 0);
@@ -359,8 +360,8 @@ void setup()
     //--------------------------------------
     
     //ssd1306 Display
-    //u8x8.setI2CAddress(0x3c);
     if ((config[digitalOut] & (1<<ssd1306_128x64)) || (config[digitalOut] & (1<<ssd1306_64x48))){
+        //u8x8.setI2CAddress(0x3c);
         u8x8.begin();
         u8x8.setPowerSave(0);
         u8x8.setContrast(config[contrast]);
