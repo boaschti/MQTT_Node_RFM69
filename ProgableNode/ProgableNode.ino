@@ -4,9 +4,10 @@ Date 28.01.2017
 Modifications Needed:
 1)  Update encryption string "ENCRYPTKEY"
 2)  Frequency setting
-3)	Pubsubclient replace #define MQTT_MAX_PACKET_SIZE 256
-4)	Adafruit_BME280.cpp replace "if (read8(BME280_REGISTER_CHIPID) != 0x60)" with "uint8_t chipId = read8(BME280_REGISTER_CHIPID); if ((chipId != 0x58) && (chipId != 0x60))"
+3)	Add Programmer ..\Arduino\hardware\arduino\avr\programmers.txt 
+4)	..\Users\..\Documents\Arduino\libraries\Adafruit_BME280_Library\Adafruit_BME280.cpp replace "if (read8(BME280_REGISTER_CHIPID) != 0x60)" with "uint8_t chipId = read8(BME280_REGISTER_CHIPID); if ((chipId != 0x58) && (chipId != 0x60))"
 5)	RFM69.h replace   #define RF69_IRQ_PIN          3    #define RF69_IRQ_NUM          1
+6)  Add special board defines to ..\Arduino\hardware\arduino\avr\boards.txt
 
 
 */
@@ -18,6 +19,7 @@ Modifications Needed:
 #include <avr/sleep.h>
 #include <avr/wdt.h> 
 #include <RFM69registers.h>
+#include <avr/power.h>
 
 //Standardkonfig wird uebernommen wenn JP_2 == GND oder funktion_pin0 == 255 (Komando "w_0":"255")
 #define DEFAULTNODEID        250    //unique for each node on same network
@@ -97,7 +99,7 @@ unsigned long SensorPeriod;
 volatile unsigned long WdTrigTimeStamp;
 unsigned long WdPinTimeout;
 volatile boolean SleepAlowed;
-boolean BreakSleep = 0;  //todo volatile ???
+boolean BreakSleep = 0;
 
 //end Board Defines ---------------------------------------------------------------------------------------------------
 
@@ -131,16 +133,16 @@ uint8_t eeEncryptKey[16] EEMEM;
 
 //Zum konfigurieren der digitalen Sensoren muss man nur angeben welche Sensoren gelesen werden sollen.
 //Bits der Variable digitalsensors
-#define readDS18        0           //(Pins s. defines ONE_WIRE_BUS) (Quartz erforderlich)
-#define readHC05        1           //Ultraschall Sensor (Pins s. defines HC05pingPin und HC05trigPin) (Quartz erforderlich)
+#define readDS18        0           //(Pins s. defines ONE_WIRE_BUS)
+#define readHC05        1           //Ultraschall Sensor (Pins s. defines HC05pingPin und HC05trigPin)
 #define readBME         2           //BME280 und BMP280 (Standart I2C Pins)
-#define readDHT         3           //(Quartz erforderlich)
+#define readDHT         3           //
 
 //Zum kofigurieren von digitalen Aktoren muss man nur angeben welche Aktoren verbaut sind.
 //Bits der Variable digitalOut
 #define writeWsLed      0           //Max 255 ws2812b LEDs
 #define uart			1
-#define dmx             2           //Wenn ein DMX Signal ausgegeben werden soll (Quartz erforderlich)
+#define dmx             2           //Wenn ein DMX Signal ausgegeben werden soll
 #define ssd1306_64x48   3
 #define ssd1306_128x64  4
 
@@ -176,13 +178,13 @@ uint8_t eeEncryptKey[16] EEMEM;
 #define  nodeControll           20
 #define  sleepTimeMulti         21    //sleepTime Multiplikator
 #define  sleepTime              22    //Sleep time in Sekunden * 8 sec, Wenn der Timer gesetzt ist wird auch die Batteriespannung gemessen
-#define  watchdogTimeout        23    //watchdog in * 8 sec, Zeit bis zum abfallen des Watchdogs und setzen der Pins auf den vorgegebenen Zustand (wdDefault). todo Der Sleep wird gesperrt wenn der Watchdog nicht abgefallen ist.
+#define  watchdogTimeout        23    //watchdog in * 8 sec, Zeit bis zum abfallen des Watchdogs und setzen der Pins auf den vorgegebenen Zustand (wdDefault). Der Sleep wird gesperrt wenn der Watchdog nicht abgefallen ist.
 #define  watchdogDelay          24    //watchdog in * 5 sec, Zeit bis zum nachsten senden eines Watchdogs (Nur wenn sleepTime == 0 konfiguriert ist oder der watchdog durch staendiges Nachtriggern den Sleep blokiert. Ansonsten wird der Watchdog sofort nach dem Aufwachen gesendet wenn watchdogDelay>0)
 
 #define  contrast               26
 #define  nodeId                 27    //NodeId dieses Sensors (einzigartig im Netzwerk)
 #define  networkId              28    //NetworkID dieses Sensors (alle gleich im Netzwerk)
-#define  gatewayId              29    //GatewayID an diese Addresse werden die Daten geschickt und es werden nur Daten von dieser Addresse beruecksichitgt. Todo Sollten Daten von einer Anderen Adresse kommen werden sie an das Gateway weitergeleitet.
+#define  gatewayId              29    //GatewayID an diese Addresse werden die Daten geschickt und es werden nur Daten von dieser Addresse beruecksichitgt. Sollten Daten von einer Anderen Adresse kommen werden sie an das Gateway weitergeleitet.
 #define  sensorDelay            30    //Messpause der Sensoren in * 10 sec (Nur wenn sleepTime == 0 konfiguriert ist oder der watchdog durch staendiges Nachtriggern den Sleep blokiert)
 
 //In den folgenden Definitionen ist das PinMapping beschrieben: fur digtal IOs config[0]:config[9], fur analog Is config[10]:config[14].
@@ -217,6 +219,181 @@ void pciSetup(byte pin)
     *digitalPinToPCMSK(pin) |= bit (digitalPinToPCMSKbit(pin));  // enable pin
     PCIFR  |= bit (digitalPinToPCICRbit(pin)); // clear any outstanding interrupt
     PCICR  |= bit (digitalPinToPCICRbit(pin)); // enable interrupt for the group
+}
+
+
+
+boolean oscCalibration(void){
+	
+	//Timer1 laufen lassen
+	//TImer2 clock source auf externen pin ohne prescaler
+	//beide Timer starten
+    //polling auf den overflow
+	//den Timer1 stoppen 
+    //werte des Timer1 mit dem REF_VAL vergleichen
+	//osccal incrementieren oder decrementieren
+    //bei einem Timeout die Schleife verlassen und osccal zurueck setzen
+    
+    //Input Reference Clock on Pin TOSC1          
+    #define REF_CLOCK 1000000UL
+
+
+    #define COUNT_PRE (1 << CS10)
+    #define COUNT_PREDIV 1
+    
+    //Bei extrem langsamer ref Clock und schnellem Internen Takt
+    //#define COUNT_PRE (1 << CS11)
+    //#define COUNT_PREDIV 8
+
+
+    #define REF_VAL F_CPU / (REF_CLOCK / 256) / COUNT_PREDIV
+
+    #define REF_MIN REF_VAL - 5
+
+    #define REF_MAX REF_VAL + 5
+
+    //setze clock prescaler auf 2. Internal Clock 8MHZ / 2 = 4MHZ. Das ist das maximum bei minimaler Betriebsspannnung von 1.8V.
+    clock_prescale_set(1);
+    
+    uint8_t oldOscal = OSCCAL;
+    uint8_t oldTCCR1A = TCCR1A;
+    uint8_t oldTCCR1B = TCCR1B;
+    uint8_t oldTCCR1C = TCCR1C;
+    uint8_t oldTIMSK1 = TIMSK1;
+    uint8_t oldTCCR2A = TCCR2A;
+    uint8_t oldTCCR2B = TCCR2B;
+    uint8_t oldTIMSK2 = TIMSK2;
+    uint8_t oldASSR  = ASSR;
+    
+    //Reset Timer1 und Timer2
+    TCCR1A = 0;
+    TCCR1B = 0;
+    TCCR1C = 0;
+    TIMSK1 = 0;
+    TCCR2A = 0;
+    TCCR2B = 0;
+    TIMSK2 = 0;
+    ASSR = 0;
+
+    uint16_t temp3 = 0;
+    uint16_t temp4 = 0;
+    
+    unsigned char nTimeOut = 1;
+
+    uint8_t oldREG_DIOMAPPING2 = rfm69.readReg(REG_DIOMAPPING2);
+    rfm69.writeReg(REG_DIOMAPPING2, RF_DIOMAPPING2_CLKOUT_1); 
+
+
+    //Timer anhalten, Prescaler Reset
+    TIMSK2 = 0;
+    GTCCR |= (1 << TSM) | (1 << PSRASY);
+    ASSR = (1<<EXCLK);
+    ASSR |= (1 << AS2);
+    TCCR2B = (1 << CS20);
+    TCCR2A = 0;    //Normal operation.  Reset timer on hitting TOP.
+    GTCCR &= ~(1 << TSM);//Timer starten
+    
+    while(!(TIFR2 & (1 << TOV2)));
+    //Clear Interrupt Flags
+    TIFR2 = (1 << OCF2B) | (1 << OCF2A) | (1 << TOV2);
+    TCCR1B = COUNT_PRE;
+    
+    //OSCAL in die "Mitte" setzen, da wir die Schleife nur jedes zweite Mal auswerten
+    OSCCAL = 128;
+    
+    cli();
+    while(nTimeOut){
+        //Poll Timer2    
+        if(TIFR2 & (1 << TOV2)){
+            //Stop Timer1, Prescaler Reset
+            GTCCR = (1 << TSM) | (1 << PSRSYNC);
+            TIFR2 = (1 << OCF2B) | (1 << OCF2A) | (1 << TOV2);
+            unsigned int nTcnt1 = TCNT1;
+            if(!(nTimeOut & (1 << 0))){
+                if (!temp3){
+                    temp3 = nTcnt1;
+                }
+                if((nTcnt1 >= REF_MIN) && (nTcnt1 <= REF_MAX)){
+                    temp4 = nTcnt1;
+                    break;
+                }else{
+                    if(nTcnt1 < REF_VAL){
+                        OSCCAL++;
+                        digitalWrite(LED_2, HIGH);
+                    }
+                    if(nTcnt1 > REF_VAL){
+                        OSCCAL--;
+                        digitalWrite(LED_3, HIGH);
+                    }
+                }
+                digitalWrite(LED_2, LOW);
+                digitalWrite(LED_3, LOW);
+                TCNT1 = 0;
+                
+            }else{
+                GTCCR = 0;//Start Timer1
+            }
+            nTimeOut++;
+        }
+    }
+    sei();
+    
+    rfm69.writeReg(REG_DIOMAPPING2, oldREG_DIOMAPPING2);    
+
+    //Register wiederherstellen
+    TCCR1A = oldTCCR1A;
+    TCCR1B = oldTCCR1B;
+    TCCR1C = oldTCCR1C;
+    TIMSK1 = oldTIMSK1;
+    TCCR2A = oldTCCR2A;
+    TCCR2B = oldTCCR2B;
+    TIMSK2 = oldTIMSK2;
+    ASSR = oldASSR;
+    // Clear Interrupt Flags
+    TIFR1 = (1 << ICF1) | (1 << OCF1B) | (1 << OCF1A) | (1 << TOV1);
+    TIFR2 = (1 << OCF2B) | (1 << OCF2A) | (1 << TOV2);
+    //Start Timer1
+    GTCCR = 0;
+    
+    char temp2[13];
+    char wert[5];
+    
+    /*
+    strcpy(temp2, "T1a " );
+    ltoa(temp3, wert, 10);
+    strncat(temp2, wert, 8);        
+    u8x8.drawString(4,5,temp2);    
+
+    strcpy(temp2, "T1b " );
+    ltoa(temp4, wert, 10);
+    strncat(temp2, wert, 8);        
+    u8x8.drawString(4,6,temp2); 
+    */
+    
+    delay(1000);
+    
+    for (uint8_t i = 0; i < 1; i++){
+        digitalWrite(LED_1, HIGH);
+        delay(500);
+        digitalWrite(LED_1, LOW);
+        delay(500);
+    }    
+    
+    if(!nTimeOut)
+    {
+        //Error, Kalibrierung abgebrochen
+        OSCCAL = oldOscal;    //zurück setzen auf den Rest Wert
+        u8x8.drawString(4,7,"Err Cal ");   
+        return false;
+    }else{
+        strcpy(temp2, "OK " );
+        itoa(OSCCAL, wert, 10);
+        strncat(temp2, wert, 8);        
+        u8x8.drawString(4,7,temp2);
+        return true;
+    }
+
+
 }
 
 void initVariables(void)
@@ -306,7 +483,7 @@ uint8_t getJumper(void){
     //1=VDD
     //2=open
         pinMode(JP_2, INPUT);
-        delay(5);
+        delay(50);
         if (digitalRead(JP_2)){
             return 1;
         }	
@@ -335,6 +512,7 @@ void setup()
     check_improveConfig();
     setupPins();
     //reset_wdPins(); 
+
     
     //RFM69-------------------------------------------
     //Reset
@@ -374,9 +552,16 @@ void setup()
         strcpy(temp, "Net  " );
         itoa(config[networkId], wert, 10);
         strncat(temp, wert, 3);        
-        u8x8.drawString(4,3,temp);    
+        u8x8.drawString(4,3,temp);
+        //todo delete debug info
+        strcpy(temp, "JP  " );
+        itoa(getJumper(), wert, 10);
+        strncat(temp, wert, 3);        
+        u8x8.drawString(4,4,temp);         
     }
 
+    oscCalibration();
+        
     //device DHT
     if (config[digitalSensors] & (1<<readDHT)){
         dht.begin();
@@ -575,12 +760,7 @@ boolean readMessage(char *message){
                 i++;
                 i++;
                 //Wir wollen in einem sauberen Zustand starten
-                //todo if funktoniert so nicht
-                if ((atoi(parts[i + 1]) != contrast)){
-                    resetCPU = true;
-                }else{
-                    setup();
-                }
+                resetCPU = true;
             }
         }
         //zum lesen der Config
