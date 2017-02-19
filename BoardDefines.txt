@@ -1,0 +1,44 @@
+##############################################################
+
+BaRFM.name=Arduino BaRFM
+
+BaRFM.upload.tool=avrdude
+BaRFM.upload.protocol=stk500v2
+
+BaRFM.bootloader.tool=avrdude
+BaRFM.bootloader.low_fuses=0xd2
+BaRFM.bootloader.unlock_bits=0x3F
+BaRFM.bootloader.lock_bits=0x0F
+
+BaRFM.build.f_cpu=4000000L
+BaRFM.build.board=AVR_MINI
+BaRFM.build.core=arduino
+BaRFM.build.variant=eightanaloginputs
+
+## BaRFM w/ ATmega328
+## -------------------------
+BaRFM.menu.cpu.atmega328=ATmega328
+
+BaRFM.menu.cpu.atmega328.upload.maximum_size=32000
+BaRFM.menu.cpu.atmega328.upload.maximum_data_size=2048
+BaRFM.menu.cpu.atmega328.upload.speed=115200
+
+BaRFM.menu.cpu.atmega328.bootloader.high_fuses=0xd1
+BaRFM.menu.cpu.atmega328.bootloader.extended_fuses=0xfe
+BaRFM.menu.cpu.atmega328.bootloader.file=optiboot/optiboot_atmega328-Mini.hex
+
+BaRFM.menu.cpu.atmega328.build.mcu=atmega328p
+
+## BaRFM w/ ATmega168
+## -------------------------
+BaRFM.menu.cpu.atmega168=ATmega168
+
+BaRFM.menu.cpu.atmega168.upload.maximum_size=14336
+BaRFM.menu.cpu.atmega168.upload.maximum_data_size=1024
+BaRFM.menu.cpu.atmega168.upload.speed=19200
+
+BaRFM.menu.cpu.atmega168.bootloader.high_fuses=0xc6
+BaRFM.menu.cpu.atmega168.bootloader.extended_fuses=0x01
+BaRFM.menu.cpu.atmega168.bootloader.file=atmega/ATmegaBOOT_168_ng.hex
+
+BaRFM.menu.cpu.atmega168.build.mcu=atmega168
