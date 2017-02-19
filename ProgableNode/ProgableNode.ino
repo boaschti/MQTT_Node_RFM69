@@ -867,17 +867,17 @@ void read_bme(void){
     dtostrf(temp_F, 3, 1, Temp);
     write_buffer_str("Bp", &Temp[0]);
     
-    temp_F = bme.readAltitude(SEALEVELPRESSURE_HPA);	//Hoehe in m
+    //temp_F = bme.readAltitude(SEALEVELPRESSURE_HPA);	//Hoehe in m
     //dtostrf(floatVar, minStringWidthIncDecimalPoint, numVarsAfterDecimal, charBuf);
-    dtostrf(temp_F, 3, 1, Temp);
-    write_buffer_str("Ba", &Temp[0]);
+    //dtostrf(temp_F, 3, 1, Temp);
+    //write_buffer_str("Ba", &Temp[0]);
         
-    //Nur bei BME280 nicht bei BMP280
+    //Nur bei BME280 nicht bei BMP280,
     temp_F = bme.readHumidity();
     //dtostrf(floatVar, minStringWidthIncDecimalPoint, numVarsAfterDecimal, charBuf);
     dtostrf(temp_F, 3, 1, Temp);
-    write_buffer_str("Bh", &Temp[0]);	
-        
+    write_buffer_str("Bh", &Temp[0]);
+
 }
 
 void read_Dallas(void)
