@@ -8,6 +8,25 @@ Modifications Needed:
 4)	..\Users\..\Documents\Arduino\libraries\Adafruit_BME280_Library\Adafruit_BME280.cpp replace "if (read8(BME280_REGISTER_CHIPID) != 0x60)" with "uint8_t chipId = read8(BME280_REGISTER_CHIPID); if ((chipId != 0x58) && (chipId != 0x60))"
 5)	RFM69.h replace   #define RF69_IRQ_PIN          3    #define RF69_IRQ_NUM          1
 6)  Add special board defines to ..\Arduino\hardware\arduino\avr\boards.txt
+7)  Add: 
+        void Adafruit_BME280::sleepMode(void){
+          uint8_t oldBME280_REGISTER_CONTROL = read8(BME280_REGISTER_CONTROL);
+          oldBME280_REGISTER_CONTROL &= ~((1<<0) | (1<<1));
+          write8(BME280_REGISTER_CONTROL, oldBME280_REGISTER_CONTROL);
+        }
+
+        void Adafruit_BME280::normalMode(void){
+          uint8_t oldBME280_REGISTER_CONTROL = read8(BME280_REGISTER_CONTROL);
+          oldBME280_REGISTER_CONTROL |= (1<<0) | (1<<1);
+          write8(BME280_REGISTER_CONTROL, oldBME280_REGISTER_CONTROL);
+        }
+
+    to ...\Documents\Arduino\libraries\Adafruit_BME280_Library\Adafruit_BME280.cpp
+8)  Add 
+        void  sleepMode(void);
+        void  normalMode(void);
+    to ...\Documents\Arduino\libraries\Adafruit_BME280_Library\Adafruit_BME280.h
+
 
 
 */
@@ -864,6 +883,9 @@ void read_bme(void){
     
     temp_F = bme.readPressure() / 100.0F;				//in hPa
     //dtostrf(floatVar, minStringWidthIncDecimalPoint, numVarsAfterDecimal, charBuf);
+    if (temp_F == 0.0F){
+        bme.begin();
+    }
     dtostrf(temp_F, 3, 1, Temp);
     write_buffer_str("Bp", &Temp[0]);
     
@@ -937,9 +959,9 @@ uint16_t read_Vcc(boolean sendWert = true){
     // Lese 1.1V reference gegen AVcc
 
     uint16_t result;   
-    ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1);
+    ADMUX = (1<<REFS0) | (1<<MUX3) | (1<<MUX2) | (1<<MUX1);
     delay(2);
-    ADCSRA |= _BV(ADSC);
+    ADCSRA |= (1<<ADSC);
     while (bit_is_set(ADCSRA,ADSC));
     result = ADCL;
     result |= ADCH<<8;	
@@ -992,11 +1014,24 @@ void go_sleep(void){
     digitalWrite(LED_2, LOW);
     
     rfm69.sleep();
-    
-    if ((config[digitalOut] & (1<<ssd1306_128x64)) || (config[digitalOut] & (1<<ssd1306_64x48))){
-        u8x8.setPowerSave(1);
+    if (config[digitalSensors] & (1<<readBME)){
+        bme.sleepMode();
     }
-    //todo? reg PRR und ADMUX
+    
+    //Wenn ein Display verbaut ist und sensorPowerSleep nicht gesetzt ist
+    if ((config[digitalOut] & (1<<ssd1306_128x64)) || (config[digitalOut] & (1<<ssd1306_64x48))){
+        if (!(config[nodeControll] & (1<<sensorPowerSleep))){
+            u8x8.setPowerSave(1);
+        }
+    }
+
+    //todo BME sleep
+    uint8_t oldADMUX = ADMUX;
+    ADMUX = 0;
+    uint8_t oldADCSRA = ADCSRA;
+    ADCSRA = 0;
+    uint8_t oldPRR = PRR;
+    PRR = 0;
     
     //Wir schalten den Watchdog ein. 8sec und Interrupt damit wir wieder aufwachen
     wdt_set(WDTO_8S);
@@ -1016,7 +1051,14 @@ void go_sleep(void){
     }
     
     disableWd();
-
+    PRR = oldPRR;
+    ADMUX = oldADMUX;
+    ADCSRA = oldADCSRA;
+    
+    if (config[digitalSensors] & (1<<readBME)){
+        bme.normalMode();
+    }
+    
     //rfm69.receiveDone();	//set RFM to RX
     if ((config[digitalOut] & (1<<ssd1306_128x64)) || (config[digitalOut] & (1<<ssd1306_64x48))){
         u8x8.setPowerSave(0);
