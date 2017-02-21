@@ -41,7 +41,7 @@ Modifications Needed:
 #include <avr/power.h>
 
 //Standardkonfig wird uebernommen wenn JP_2 == GND oder funktion_pin0 == 255 (Komando "w_0":"255")
-#define DEFAULTNODEID        250    //unique for each node on same network
+#define DEFAULTNODEID        255    //unique for each node on same network
 #define DEFAULTNETWORKID     146  //the same on all nodes that talk to each other
 #define DEFAULTGATEWAYID     1
 #define DEFAULTENCRYPTKEY    "sampleEncryptKey" //exactly the same 16 characters/bytes on all nodes!
@@ -338,17 +338,12 @@ boolean oscCalibration(void){
                 }else{
                     if(nTcnt1 < REF_VAL){
                         OSCCAL++;
-                        digitalWrite(LED_2, HIGH);
                     }
                     if(nTcnt1 > REF_VAL){
                         OSCCAL--;
-                        digitalWrite(LED_3, HIGH);
                     }
                 }
-                digitalWrite(LED_2, LOW);
-                digitalWrite(LED_3, LOW);
                 TCNT1 = 0;
-                
             }else{
                 GTCCR = 0;//Start Timer1
             }
@@ -377,38 +372,19 @@ boolean oscCalibration(void){
     char temp2[13];
     char wert[5];
     
-    /*
-    strcpy(temp2, "T1a " );
-    ltoa(temp3, wert, 10);
-    strncat(temp2, wert, 8);        
-    u8x8.drawString(4,5,temp2);    
-
-    strcpy(temp2, "T1b " );
-    ltoa(temp4, wert, 10);
-    strncat(temp2, wert, 8);        
-    u8x8.drawString(4,6,temp2); 
-    */
-    
-    delay(1000);
-    
-    for (uint8_t i = 0; i < 1; i++){
-        digitalWrite(LED_1, HIGH);
-        delay(500);
-        digitalWrite(LED_1, LOW);
-        delay(500);
-    }    
-    
     if(!nTimeOut)
     {
         //Error, Kalibrierung abgebrochen
         OSCCAL = oldOscal;    //zurück setzen auf den Rest Wert
-        u8x8.drawString(4,7,"Err Cal ");   
+        //u8x8.drawString(4,7,"Err Cal ");   
         return false;
     }else{
+        /*
         strcpy(temp2, "OK " );
         itoa(OSCCAL, wert, 10);
         strncat(temp2, wert, 8);        
         u8x8.drawString(4,7,temp2);
+        */
         return true;
     }
 
@@ -628,9 +604,9 @@ void setup()
     uint8_t messageOverhead;
     
     if (strWert == true){
-        messageOverhead = messageOverheadDec;
-    }else{
         messageOverhead = messageOverheadStr;
+    }else{
+        messageOverhead = messageOverheadDec;
     }
     
     //Es wird geprueft ob die Nachricht ueberhaupt in den Buffer passt ansonsten senden wir eine Fehlermeldung
@@ -701,20 +677,22 @@ void sendInt(char *name, uint8_t wert){
 }
 
 boolean readMessage(char *message){
-    // "R_12":"125"
+    // Message str input: "R_12":"125"
+    //Diese folgende Schleife macht aus dem String 3 oder eine vielzahl von 3 NULL terminierte Strings
+    //o.g. message ergibt parts[0] == R , parts[1] == 12, parts[2] == 125, i == 2
     char parts[15][10];
     char *p_start, *p_end;
     uint8_t i = 0;
     p_start = message;
     while(1) {
         p_end = strchr(p_start, '_'); 
-        if (p_end) {							//copy R
+        if (p_end) {							//copy "R"
             strncpy(parts[i], p_start+1, p_end-p_start-1);
             parts[i][p_end-p_start-1] = 0;
             i++;
             p_start = p_end + 1;
             p_end = strchr(p_start, '/"'); 
-            if (p_end) {						//copy12
+            if (p_end) {						//copy "12"
                 strncpy(parts[i], p_start, p_end-p_start);
                 parts[i][p_end-p_start] = 0;
                 i++;
@@ -723,7 +701,7 @@ boolean readMessage(char *message){
                 if (p_end) {					//prepare to search next "
                     p_start = p_end + 1;
                     p_end = strchr(p_start, '/"');
-                    if (p_end) {				//copy 125
+                    if (p_end) {				//copy "125"
                         strncpy(parts[i], p_start, p_end-p_start);
                         parts[i][p_end-p_start] = 0;
                         i++;
@@ -762,6 +740,7 @@ boolean readMessage(char *message){
     uint8_t listLen = i;
     boolean resetCPU = false;
     
+    //folgende Schleife vergleicht die Strings in dem parts array mit den Steuerbefehlen der Node und uebernimmt die Daten
     for (uint8_t i=0; i<=listLen; i++){
         /*
         write_buffer_str("parse", parts[i], true);
@@ -776,8 +755,7 @@ boolean readMessage(char *message){
                 char temp[10] = "infoReg";
                 strncat(temp, parts[i+1],2);
                 sendInt(temp, config[atoi(parts[i + 1])]);
-                i++;
-                i++;
+                i += 2;
                 //Wir wollen in einem sauberen Zustand starten
                 resetCPU = true;
             }
@@ -787,8 +765,7 @@ boolean readMessage(char *message){
             char temp[10] = "infoReg";
             strncat(temp, parts[i+1],2);
             sendInt(temp, config[atoi(parts[i + 1])]);
-            i++;
-            i++;
+            i += 2;
         }
         //zum setzen von Ports
         if (strcmp(parts[i] , "p") == 0){
@@ -802,9 +779,8 @@ boolean readMessage(char *message){
             }else{
                 digitalWrite(pinMapping[atoi(parts[i + 1])],LOW);
             }
-            //setze Bit "readInput" fuer den jeweiligen Port damit der Status zurueck gesendet wird
-            i++;
-            i++;
+            //damit der Status zurueck gesendet wird setze das Bit "readInput" fuer den jeweiligen Port 
+            i += 2;
         }
         if (strcmp(parts[i] , "d") == 0){
             if (config[digitalOut] & (1<<ssd1306_64x48)){
@@ -814,13 +790,13 @@ boolean readMessage(char *message){
                 u8x8.drawString(0, atoi(parts[i + 1]), "            ");
                 u8x8.drawString(0, atoi(parts[i + 1]), parts[i + 2]);
             }
+            i += 2;
         }
         //den Watchdog nachtriggern
         if (strcmp(parts[i] , "wd") == 0){
             WdTrigTimeStamp = millis();
             SleepAlowed = false;		
-            i++;
-            i++;
+            i += 2;
         }
     }
     if (resetCPU){
@@ -832,7 +808,7 @@ boolean readMessage(char *message){
     }
 }
 
-void radio_Rx_loop(void) {
+boolean radio_Rx_loop(void) {
     //pruefen ob daten vom RFM vorliegen
     if (rfm69.receiveDone())
     {
@@ -865,10 +841,10 @@ void radio_Rx_loop(void) {
             //rfm69.initialize(FREQUENCY, config[nodeId], config[networkId]);
         }
         digitalWrite(LED_1, LOW);
-
-        } 
-    else {
-            rfm69.receiveDone(); //put rfm69 in RX mode
+        return true;
+    }else{
+        rfm69.receiveDone(); //put rfm69 in RX mode
+        return false;
     }
 }
 
@@ -899,7 +875,6 @@ void read_bme(void){
     //dtostrf(floatVar, minStringWidthIncDecimalPoint, numVarsAfterDecimal, charBuf);
     dtostrf(temp_F, 3, 1, Temp);
     write_buffer_str("Bh", &Temp[0]);
-
 }
 
 void read_Dallas(void)
@@ -918,13 +893,15 @@ void read_Dallas(void)
         char *dsAddr;
         dallas.getAddress(dsAddr, i);
         strncat(temp,dsAddr,3); //Wir wollen nur 3 Stellen der Addresse senden
-        write_buffer_str(&temp[0], &wert[0]);
-
+        write_buffer_str(temp, wert);
     }
+
+    if (dallas.getDeviceCount() == 0){
+        write_buffer_str("err", "noDS");
+    }   
 }
 
-
-void read_DHT(boolean readImmediatelly = false)
+void read_DHT(void)
 {
     
     //Nach dem einschalten des Sensors muss man min 1sec warten bis der Sensor richtige Daten liefert. Das muss der Aufrufer garantieren.
@@ -1000,11 +977,8 @@ void read_analog(void){
             }
             itoa(OutputWert,wert,10);
             write_buffer_str(temp,wert);
-        }
-        
+        }   
     }
-    
-    
 }
 
 void go_sleep(void){
@@ -1106,7 +1080,6 @@ void reset_wdPins(void){
             }
         }
     }
-    
 }
 
 //---------------------------------------------------------------------------------------------
@@ -1135,7 +1108,7 @@ void loop()
             read_Vcc();
         }
         if (config[digitalSensors] & (1<<readDS18)){	
-            read_Dallas();
+            //read_Dallas();
         }
         if (config[digitalSensors] & (1<<readHC05)){
             read_HC05();
@@ -1162,15 +1135,12 @@ void loop()
     //Zum leeren des Buffers und senden aller Daten
     write_buffer_str("","");
 
-
     timepassed = millis() - WdTrigTimeStamp;
     if (timepassed > WdPinTimeout){
         //WdTrigTimeStamp = millis();
         reset_wdPins();
         SleepAlowed = true;
     }
-
-
 
     if((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0) && SleepAlowed){
         //Wir senden eine dec11 damit das Gateway diese Node beim Broker subscibed und wir retained Messages erhalten
