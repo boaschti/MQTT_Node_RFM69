@@ -597,7 +597,7 @@ void setup()
     #define messageOverheadStr 6	//"":"",
     #define messageOverheadDec 4	//"":,
     
-    static char sendBuffer[RF69_MAX_DATA_LEN];
+    static char sendBuffer[RF69_MAX_DATA_LEN + 1];
     static uint8_t sendBufferPointer = 0;	
     uint8_t nameLength = strnlen(name, RF69_MAX_DATA_LEN);
     uint8_t wertLength = strlen(wert);
@@ -913,7 +913,7 @@ void read_DHT(void)
         
     float temp_F;
     if (isnan(t) || isnan(h)) {
-        write_buffer_str("err", "DHT_read",true);
+        write_buffer_str("err", "DHT_read", true);
         write_buffer_str("","");
     } else {
         char Temp[10];
@@ -1108,7 +1108,7 @@ void loop()
             read_Vcc();
         }
         if (config[digitalSensors] & (1<<readDS18)){	
-            //read_Dallas();
+            read_Dallas();
         }
         if (config[digitalSensors] & (1<<readHC05)){
             read_HC05();
