@@ -98,13 +98,9 @@ U8X8_SSD1306_128X64_NONAME_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE);
     #define SEALEVELPRESSURE_HPA (1013.25)
     Adafruit_BME280 bme;
     
-//ADC6 atmega voltage, to measure switch on Port 6 
-    #define circuitOn		6 //Port6
-    #define atVolage		6 //ADC6
-
 //Pins to Power up the Sensors
-    #define pumpPin			6
-    #define supplyPin		5
+    #define pumpPin			5
+    #define supplyPin		6
     
 //device ultrasonic
     #define HC05pingPin 	0
@@ -170,6 +166,8 @@ uint8_t eeEncryptKey[16] EEMEM;
 #define sensorPower			0       //der supplyPin (5) wird zum Versorgen von Sensoren und fuer die LED2 verwendet. Wenn 0 dann nur fue die LED2.
 #define pumpSensorVoltage   1		//der pumpPin (6) wird zum verdoppeln der Betriebsspannnung fuer Sensoren verwendet indem ein Kondensator aufgeladen wird. Sowie fuer die LED1. Wenn 0 dann nur fue die LED1.
 #define sensorPowerSleep    2       //die Sensor versorgung wird waehrend dem Sleep nicht abgeschaltet. Wenn pumpSensorVoltage gesetzt ist wird alle 8sec der Kondensator erneut aufgeladen.
+#define debugLed            3       //schaltet die Led Status anzeigen 
+#define displayAlwaysOn     4       //Das Display wird im sleep nicht abgeschaltet
 
 //Die folgenden Definitionen zeigen die Stelle im BYTE Array wo die Einstellungen gespeichert sind:
 //Man kann direkt auf das ARRAY per Funk zugreifen die Werte sind immer dezimal:
@@ -460,12 +458,12 @@ void setupPins(void)
             pciSetup(pinMapping[i]);
         }
     }	
-
-    //Wenn eine SleepTime configuriert ist gehen wir davon aus dass die Batteriespanung auch gelesen werden soll
-    if (config[sleepTime] > 0){
-        pinMode(circuitOn, OUTPUT);
-    }
     
+    //Der supplyPin ist zum versorgen der Sensoren gedacht
+    if (config[nodeControll] & (1<<sensorPower)){
+        digitalWrite(supplyPin, HIGH);
+    }    
+
     if (config[digitalSensors] & (1<<readHC05)){
         pinMode(HC05pingPin, INPUT);
         pinMode(HC05trigPin, OUTPUT);
@@ -816,8 +814,9 @@ boolean radio_Rx_loop(void) {
         int16_t rssi;
         uint8_t data[RF69_MAX_DATA_LEN];
         uint8_t dataLen;
-        
-        digitalWrite(LED_1, HIGH);
+        if (config[nodeControll] & (1<<debugLed)){
+            digitalWrite(LED_1, HIGH);
+        }
         
         //speichern der Daten, da evt schon wieder welche ankommen
         senderId = rfm69.SENDERID;
@@ -981,11 +980,25 @@ void read_analog(void){
     }
 }
 
+void pump_Sensor_Voltage(void){
+    
+    for (uint16_t i = 0; i < 130; i++){
+        digitalWrite(pumpPin, HIGH);
+        delay(1);
+        digitalWrite(pumpPin, LOW);
+        delay(1);
+    }
+
+}
 void go_sleep(void){
     
     BreakSleep = false;
-
+    
     digitalWrite(LED_2, LOW);
+    
+    if (!(config[nodeControll] & (1<<sensorPowerSleep))){
+        digitalWrite(supplyPin, LOW);
+    }
     
     rfm69.sleep();
     if (config[digitalSensors] & (1<<readBME)){
@@ -994,7 +1007,7 @@ void go_sleep(void){
     
     //Wenn ein Display verbaut ist und sensorPowerSleep nicht gesetzt ist
     if ((config[digitalOut] & (1<<ssd1306_128x64)) || (config[digitalOut] & (1<<ssd1306_64x48))){
-        if (!(config[nodeControll] & (1<<sensorPowerSleep))){
+        if (!(config[nodeControll] & (1<<displayAlwaysOn))){
             u8x8.setPowerSave(1);
         }
     }
@@ -1011,6 +1024,13 @@ void go_sleep(void){
     wdt_set(WDTO_8S);
 
     for (uint16_t i = 0; i < (config[sleepTime] * config[sleepTimeMulti]); i++){
+        //Wenn der Sensor versorgt werden soll und die Spannung erhöht werden soll
+        if ((config[nodeControll] & (1<<pumpSensorVoltage)) && (config[nodeControll] & (1<<sensorPowerSleep))){
+            digitalWrite(supplyPin, HIGH);
+            pump_Sensor_Voltage();
+            digitalWrite(supplyPin, LOW);
+        }
+
         set_sleep_mode(SLEEP_MODE_PWR_DOWN);   // sleep mode is set here	    
         sleep_enable();         // enables the sleep bit in the mcucr register
         
@@ -1033,12 +1053,18 @@ void go_sleep(void){
         bme.normalMode();
     }
     
+    //Wenn der Sensor während des Sleeps nicht versorgt wurde schalten wir ihn hier wieder ein
+    if (config[nodeControll] & (1<<sensorPower)){
+        digitalWrite(supplyPin, HIGH);
+    }    
+    
     //rfm69.receiveDone();	//set RFM to RX
     if ((config[digitalOut] & (1<<ssd1306_128x64)) || (config[digitalOut] & (1<<ssd1306_64x48))){
         u8x8.setPowerSave(0);
     }
-    
-    digitalWrite(LED_2, HIGH);
+    if (config[nodeControll] & (1<<debugLed)){
+        digitalWrite(LED_2, HIGH);
+    }
 }
 
 boolean read_inputs(void){
@@ -1089,11 +1115,19 @@ void loop()
 
     static long sensorTimeOld;
     static long watchdogTimeOld;
+    static long pumpTimeOld;
     static boolean sensorenLesen = true;
     static boolean wdSenden = false;
     
     digitalWrite(LED_3, LOW);
-
+    
+    if (config[nodeControll] & (1<<pumpSensorVoltage)){
+        timepassed = millis() - pumpTimeOld;
+        if (timepassed > 3000){
+            pump_Sensor_Voltage();
+        }
+    }
+    
     timepassed = millis() - sensorTimeOld;
     //Wir wollen die Sensoren abfragen wenn die Pausezeit vorbei ist, wenn sensorenLesen gesetzt ist, dann lesen wir sofort
     if ((timepassed > SensorPeriod) || (sensorenLesen == true)){
@@ -1166,7 +1200,9 @@ void loop()
 
     //Zum leeren des Buffers und senden aller Daten
     write_buffer_str("","");
-    digitalWrite(LED_3, HIGH);
+    if (config[nodeControll] & (1<<debugLed)){
+        digitalWrite(LED_3, HIGH);
+    }
     
 }//end loop
 
