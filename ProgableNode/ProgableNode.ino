@@ -844,7 +844,9 @@ boolean radio_Rx_loop(void) {
             rfm69.sendWithRetry(config[gatewayId], data, dataLen);
             //rfm69.initialize(FREQUENCY, config[nodeId], config[networkId]);
         }
-        digitalWrite(LED_1, LOW);
+        if (config[nodeControll] & (1<<debugLed)){
+            digitalWrite(LED_1, LOW);
+        }
         return true;
     }else{
         rfm69.receiveDone(); //put rfm69 in RX mode
@@ -1045,7 +1047,9 @@ void go_sleep(void){
     
     BreakSleep = false;
     
-    digitalWrite(LED_2, LOW);
+    if (config[nodeControll] & (1<<debugLed)){
+        digitalWrite(LED_2, LOW);
+    }
     
     if (!(config[nodeControll] & (1<<sensorPowerSleep))){
         digitalWrite(supplyPin, LOW);
@@ -1170,11 +1174,14 @@ void loop()
     static boolean sensorenLesen = true;
     static boolean wdSenden = false;
     
-    digitalWrite(LED_3, LOW);
+    if (config[nodeControll] & (1<<debugLed)){
+        digitalWrite(LED_3, LOW);
+    }
     
     if (config[nodeControll] & (1<<pumpSensorVoltage)){
         timepassed = millis() - pumpTimeOld;
         if (timepassed > 3000){
+            pumpTimeOld = millis();
             pump_Sensor_Voltage();
         }
     }
@@ -1242,7 +1249,9 @@ void loop()
         if (SleepAlowed){
             //Zum leeren des Buffers und senden aller Daten vor den Sleep
             write_buffer_str("","");
-            digitalWrite(LED_3, LOW);
+            if (config[nodeControll] & (1<<debugLed)){
+                digitalWrite(LED_3, LOW);
+            }
             go_sleep();
             sensorenLesen = true;	//Wir wollen, dass die Sensoren sofort gelesen werden
             wdSenden = true;		//Wir wollen, dass der Watchdog sofort gesendet wird
