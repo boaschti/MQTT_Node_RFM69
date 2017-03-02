@@ -41,24 +41,23 @@ Modifications Needed:
 #include <avr/power.h>
 
 //Standardkonfig wird uebernommen wenn JP_2 == GND oder funktion_pin0 == 255 (Komando "w_0":"255")
-#define DEFAULTNODEID        255    //unique for each node on same network
-#define DEFAULTNETWORKID     146  //the same on all nodes that talk to each other
-#define DEFAULTGATEWAYID     1
-#define DEFAULTENCRYPTKEY    "sampleEncryptKey" //exactly the same 16 characters/bytes on all nodes!
+#define DEFAULTNODEID        254                    //nur einmal im Netzwerk vorhanden
+#define DEFAULTNETWORKID     146                    //bei allen Nodes im Netzwerk gleich
+#define DEFAULTGATEWAYID     1      
+#define DEFAULTENCRYPTKEY    "sampleEncryptKey"     //exakt 16 Zeichen, gleich auf allen Nodes in diesem Netzwerk
 
-//Match frequency to the hardware version of the rfm69 on your Moteino (uncomment one):
+//Frequenz vom RFM Modul
 #define FREQUENCY   RF69_433MHZ
 //#define FREQUENCY   RF69_868MHZ
 //#define FREQUENCY     RF69_915MHZ
-//#define IS_RFM69HW    //uncomment only for RFM69HW! Leave out if you have RFM69W!
-#define ACK_TIME		30 // max # of ms to wait for an ack
-#define LED_1			5  //optinonal to Power >3V sensors from 1.8V batt voltage: Write 0/1/0/1 to pump Power for external sensors (and switch on LED_2)
-#define LED_2			6 //optinonal to Power >3V sensors from 1.8V batt voltage: Power for external Sensors
+//#define IS_RFM69HW    //uncomment only for RFM69HW!
+#define ACK_TIME		30 // Wartezeit auf einen ACK
+#define LED_1			5  
+#define LED_2			6 
 #define LED_3			7 
 #define ResetRfmPin		2
 #define rxPollTime		3000 // Zeit in ms (ca) die auf eine Message gewartet wird bevor der Node in den Sleep geht
-//you can use the analog pins as digital pins, by numbering them 14 - 19
-//Analog Input PC0-PC5
+
 #define JP_1		  16 //PC2 
 #define JP_2		  15 //PC1
 #define RFM_POWER_LEVEL 31
@@ -98,10 +97,14 @@ U8X8_SSD1306_128X64_NONAME_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE);
     #define SEALEVELPRESSURE_HPA (1013.25)
     Adafruit_BME280 bme;
     
-//Pins to Power up the Sensors
+//Pins zum versorgen der Sensoren
     #define pumpPin			5
     #define supplyPin		6
     
+//Pins zum bedienen des Heiz Thermostat Stellrades
+    #define signalA         0
+    #define signalB         1    
+
 //device ultrasonic
     #define HC05pingPin 	0
     #define HC05trigPin		1
@@ -131,7 +134,7 @@ uint8_t eeEncryptKey[16] EEMEM;
 //Es koennen folgende  Eigenschaften fuer die Pins eingestellt werden:
 
 //Bits der Variablen funktion_pin..
-#define in_out			0		    //DDR wie im Atmel Datenblatt 0=in
+#define in_out          0           //DDR wie im Atmel Datenblatt 0=in
 #define port            1           //PORT wie im Atmel Datenblatt 1=High(im outputMode)/1=Pullup(im inputMode)
 #define pcInt           2           //Der Pin loest einen Interrupt aus (aufwachen aus dem Sleep und sofortiges lesen des Pins wenn readInput gesetzt ist)
 #define pwm             3           //todo Der Pin gibt ein software PWM Signal aus
@@ -156,15 +159,15 @@ uint8_t eeEncryptKey[16] EEMEM;
 //Zum kofigurieren von digitalen Aktoren muss man nur angeben welche Aktoren verbaut sind.
 //Bits der Variable digitalOut
 #define writeWsLed      0           //Max 255 ws2812b LEDs
-#define uart			1
+#define uart            1
 #define dmx             2           //Wenn ein DMX Signal ausgegeben werden soll
 #define ssd1306_64x48   3
 #define ssd1306_128x64  4
 
 //Zum einstellen des Verhaltens der Node:
 //Bits der Variable nodeControll
-#define sensorPower			0       //der supplyPin (5) wird zum Versorgen von Sensoren und fuer die LED2 verwendet. Wenn 0 dann nur fue die LED2.
-#define pumpSensorVoltage   1		//der pumpPin (6) wird zum verdoppeln der Betriebsspannnung fuer Sensoren verwendet indem ein Kondensator aufgeladen wird. Sowie fuer die LED1. Wenn 0 dann nur fue die LED1.
+#define sensorPower         0       //der supplyPin (5) wird zum Versorgen von Sensoren und fuer die LED2 verwendet. Wenn 0 dann nur fue die LED2.
+#define pumpSensorVoltage   1       //der pumpPin (6) wird zum verdoppeln der Betriebsspannnung fuer Sensoren verwendet indem ein Kondensator aufgeladen wird. Sowie fuer die LED1. Wenn 0 dann nur fue die LED1.
 #define sensorPowerSleep    2       //die Sensor versorgung wird waehrend dem Sleep nicht abgeschaltet. Wenn pumpSensorVoltage gesetzt ist wird alle 8sec der Kondensator erneut aufgeladen.
 #define debugLed            3       //schaltet die Led Status anzeigen 
 #define displayAlwaysOn     4       //Das Display wird im sleep nicht abgeschaltet
@@ -206,7 +209,7 @@ uint8_t eeEncryptKey[16] EEMEM;
 
 //In den folgenden Definitionen ist das PinMapping beschrieben: fur digtal IOs config[0]:config[9], fur analog Is config[10]:config[14].
 #define usedDio                 7       //Anzahl der verwendetetn DIOs
-#define usedAnalog				4		//Anzahl der verwendetetn analog In
+#define usedAnalog              4       //Anzahl der verwendetetn analog In
 const uint8_t pinMapping[15]{0,1,17,18,19,9,16,0,0,0,2,3,4,5,0};
 //der SSPin macht noch Probleme Spi funktioniert dann nicht mehr!
 //const uint8_t pinMapping[15]{0,1,17,18,19,9,10,0,0,0,3,4,5,0,0};
@@ -241,14 +244,14 @@ void pciSetup(byte pin)
 
 
 boolean oscCalibration(void){
-	
-	//Timer1 laufen lassen
-	//TImer2 clock source auf externen pin ohne prescaler
-	//beide Timer starten
+    
+    //Timer1 laufen lassen
+    //TImer2 clock source auf externen pin ohne prescaler
+    //beide Timer starten
     //polling auf den overflow
-	//den Timer1 stoppen 
+    //den Timer1 stoppen 
     //werte des Timer1 mit dem REF_VAL vergleichen
-	//osccal incrementieren oder decrementieren
+    //osccal incrementieren oder decrementieren
     //bei einem Timeout die Schleife verlassen und osccal zurueck setzen
     
     //Input Reference Clock on Pin TOSC1          
