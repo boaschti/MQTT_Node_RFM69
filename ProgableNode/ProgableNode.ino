@@ -409,7 +409,7 @@ void initVariables(void)
     //Alle Pins auf Eingang
     //keine Sensoren aktiv
     //es kann bei der ersten Inbetriebnahme zu Problemen (haengt beim Sensor lesen) kommen wenn diese Variable nicht auf 255 steht
-    if ((eeprom_read_byte(&eeConfig[funktion_pin0]) == 255) || getJumper(){
+    if ((eeprom_read_byte(&eeConfig[funktion_pin0]) == 255) || getJumper()){
     //if (eeprom_read_byte(&eeConfig[0]) == 255){
         for (uint8_t i = 0; i < configSize-5; i++){
             eeprom_write_byte(&eeConfig[i], 0);
