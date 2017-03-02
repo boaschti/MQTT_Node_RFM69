@@ -392,15 +392,25 @@ boolean oscCalibration(void){
 
 }
 
+boolean getJumper(void){
+
+        pinMode(JP_2, INPUT_PULLUP);
+        delay(5);
+        if (digitalRead(JP_2)){
+            return false;
+        }else{
+            return true;
+        }
+}
+
 void initVariables(void)
 {
     //Standard config laden
     //Alle Pins auf Eingang
     //keine Sensoren aktiv
     //es kann bei der ersten Inbetriebnahme zu Problemen (haengt beim Sensor lesen) kommen wenn diese Variable nicht auf 255 steht
-    //if ((eeprom_read_byte(&eeConfig[funktion_pin0]) == 255) || (getJumper() == 0){
-    if (eeprom_read_byte(&eeConfig[0]) == 255){
-    //if (1){
+    if ((eeprom_read_byte(&eeConfig[funktion_pin0]) == 255) || getJumper(){
+    //if (eeprom_read_byte(&eeConfig[0]) == 255){
         for (uint8_t i = 0; i < configSize-5; i++){
             eeprom_write_byte(&eeConfig[i], 0);
         }
@@ -472,24 +482,6 @@ void setupPins(void)
         pinMode(HC05trigPin, OUTPUT);
     }
             
-}
-
-uint8_t getJumper(void){
-    //0=GND
-    //1=VDD
-    //2=open
-        pinMode(JP_2, INPUT);
-        delay(50);
-        if (digitalRead(JP_2)){
-            return 1;
-        }	
-        pinMode(JP_2, INPUT_PULLUP);
-        delay(5);
-        if (digitalRead(JP_2)){
-            return 2;
-        }else{
-            return 0;
-        }
 }
 
 void disableWd(void){
