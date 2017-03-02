@@ -790,6 +790,11 @@ boolean readMessage(char *message){
             }
             i += 2;
         }
+        if (strcmp(parts[i] , "t") == 0){
+            if (!(set_Temperature(atoi(parts[i +2])))){
+                write_buffer_str("err", "setTemp", true);
+            }
+        }
         //den Watchdog nachtriggern
         if (strcmp(parts[i] , "wd") == 0){
             WdTrigTimeStamp = millis();
@@ -978,6 +983,52 @@ void read_analog(void){
             write_buffer_str(temp,wert);
         }   
     }
+}
+
+boolean set_Temperature(uint8_t temperature){
+
+    digitalWrite(signalA, LOW);
+    digitalWrite(signalB, LOW);
+    #define delayTimeA 5
+    #define delayTimeB 20
+    
+    //5° ist das minimum das eingestell werden kann. Von OFF zu 5° muessen wir 0.5° drehen
+    temperature -= 4;
+    temperature = temperature * 2;
+    temperature -= 1;
+
+    //Error, Encoder steht falsch 
+    if ((digitalRead(signalA) == LOW) || (digitalRead(signalB) == LOW)){
+        return false;
+    }
+
+    //Wir stellen erst au OFF
+    for ( uint8_t i = 0; i < 60; i++){
+        pinMode(signalA, OUTPUT);
+        delay(delayTimeA);
+        pinMode(signalB, OUTPUT);
+        delay(delayTimeB);
+        pinMode(signalA, INPUT);
+        delay(delayTimeA);
+        pinMode(signalB, INPUT);
+        delay(delayTimeB);
+    }
+    
+    delay(10);
+    
+    //Wir stellen die Temperatur ein
+    for ( uint8_t i = 0; i < temperature; i++){
+        pinMode(signalB, OUTPUT);
+        delay(delayTimeA);
+        pinMode(signalA, OUTPUT);
+        delay(delayTimeB);
+        pinMode(signalB, INPUT);
+        delay(delayTimeA);
+        pinMode(signalA, INPUT);
+        delay(delayTimeB);
+    }
+    
+    return true;
 }
 
 void pump_Sensor_Voltage(void){
