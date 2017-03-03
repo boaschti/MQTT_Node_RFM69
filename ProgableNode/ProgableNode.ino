@@ -144,7 +144,7 @@ uint8_t eeEncryptKey[16] EEMEM;
 
 //Zum konfigurieren der analog Inputs muss man angeben wie der Wert verrechnet wird.
 //Bits der Variablen math_analog..
-#define readPlaint      0           //Arduino Pflanzen Feuchte Sensor (untested)
+#define readPlant       0           //Arduino Pflanzen Feuchte Sensor (untested)
 #define readLDR         1           //Photo Widerstand 10k pulldown
 #define readRain        2           //Arduino Regen Sensor
 #define readRaw         3           //raw adc Wert
@@ -454,7 +454,7 @@ void setupPins(void)
     //reset Pin Rfm
     pinMode(ResetRfmPin, OUTPUT);
     
-    //starte ADC for readPlaint oder readLDR oder readRain
+    //starte ADC for readPlant oder readLDR oder readRain
     if (config[math_analog2] || config[math_analog3] || config[math_analog4] || config[math_analog5]){
         //analogReference(INTERNAL);
         analogReference(EXTERNAL);
@@ -556,7 +556,7 @@ void setup()
     }
     
     //device UART
-    if (config[nodeControll] & (1<<uart)){
+    if (config[digitalOut] & (1<<uart)){
         Serial.begin(SERIAL_BAUD);
     }
     
@@ -964,7 +964,7 @@ void read_analog(void){
             strncat(temp, tempindex, 2);
             uint16_t OutputWert;
             OutputWert = analogRead(pinMapping[i]);
-            if (config[i] & (1<<readPlaint)){
+            if (config[i] & (1<<readPlant)){
                 
             }else if (config[i] & (1<<readRain)){
                 
