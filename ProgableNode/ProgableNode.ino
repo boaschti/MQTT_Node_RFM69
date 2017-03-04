@@ -158,7 +158,7 @@ uint8_t eeEncryptKey[16] EEMEM;
 
 //Zum kofigurieren von digitalen Aktoren muss man nur angeben welche Aktoren verbaut sind.
 //Bits der Variable digitalOut
-#define writeWsLed      0           //Max 255 ws2812b LEDs
+#define free            0           
 #define uart            1
 #define dmx             2           //Wenn ein DMX Signal ausgegeben werden soll
 #define ssd1306_64x48   3
@@ -268,9 +268,9 @@ boolean oscCalibration(void){
 
     #define REF_VAL F_CPU / (REF_CLOCK / 256) / COUNT_PREDIV
 
-    #define REF_MIN REF_VAL - 5
+    #define REF_MIN REF_VAL - 2
 
-    #define REF_MAX REF_VAL + 5
+    #define REF_MAX REF_VAL + 2
 
     //setze clock prescaler auf 2. Internal Clock 8MHZ / 2 = 4MHZ. Das ist das maximum bei minimaler Betriebsspannnung von 1.8V.
     clock_prescale_set(1);
@@ -395,7 +395,7 @@ boolean oscCalibration(void){
 boolean getJumper(void){
 
         pinMode(JP_2, INPUT_PULLUP);
-        delay(5);
+        delay(1);
         if (digitalRead(JP_2)){
             return false;
         }else{
@@ -506,9 +506,9 @@ void setup()
     //Reset
 
     digitalWrite(ResetRfmPin, HIGH);
-    delay(100);
+    delay(2);
     digitalWrite(ResetRfmPin, LOW);
-    delay(100);
+    delay(10);
     //Init RFM69
     rfm69.initialize(FREQUENCY, config[nodeId], config[networkId]);
     //rfm69.initialize(FREQUENCY,NODEID,NETWORKID);
@@ -540,16 +540,13 @@ void setup()
         strcpy(temp, "Net  " );
         itoa(config[networkId], wert, 10);
         strncat(temp, wert, 3);        
-        u8x8.drawString(4,3,temp);
-        //todo delete debug info
-        strcpy(temp, "JP  " );
-        itoa(getJumper(), wert, 10);
-        strncat(temp, wert, 3);        
-        u8x8.drawString(4,4,temp);         
+        u8x8.drawString(4,3,temp);       
     }
-
-    oscCalibration();
-        
+    if (!oscCalibration()) {
+        const char errorString[] = "\"err\":\"oscCal\"";
+        rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
+    }
+    
     //device DHT
     if (config[digitalSensors] & (1<<readDHT)){
         dht.begin();
@@ -560,18 +557,13 @@ void setup()
         Serial.begin(SERIAL_BAUD);
     }
     
-    //device DS18B20
-    if (config[digitalSensors] & (1<<readDS18)){
-        dallas.begin();
-    }
-    
     if (config[digitalSensors] & (1<<readBME)){
         if (!bme.begin()) {
             const char errorString[] = "\"err\":\"BME Init\"";
             rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
         }
     }
-
+ 
     const char errorString[] = "\"info\":\"setup_Node\"";
     rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
 }
