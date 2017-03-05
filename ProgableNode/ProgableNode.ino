@@ -56,7 +56,7 @@ Modifications Needed:
 #define LED_2			6 
 #define LED_3			7 
 #define ResetRfmPin		2
-#define rxPollTime		3000 // Zeit in ms (ca) die auf eine Message gewartet wird bevor der Node in den Sleep geht
+#define rxPollTime		250 // Zeit in ms (ca) die auf eine Message gewartet wird bevor der Node in den Sleep geht
 
 #define JP_1		  16 //PC2 
 #define JP_2		  15 //PC1
@@ -228,6 +228,8 @@ __asm__ __volatile__ (  \
 _BV(WDIE) | (value & 0x07)) ) \
 : "r0"  \
 )
+
+boolean set_Temperature(uint8_t temperature, boolean setTemp = false);
 
 void pciSetup(byte pin)
 {
@@ -941,59 +943,70 @@ void read_analog(void){
     }
 }
 
-boolean set_Temperature(uint8_t temperature){
+boolean set_Temperature(uint8_t temperature, boolean setTemp = false){
 
     digitalWrite(signalA, LOW);
     digitalWrite(signalB, LOW);
     #define delayTimeA 5
     #define delayTimeB 20
+    static uint8_t sollTemp = 0;
+    static uint8_t istTemp = 0;
     
-    //5° ist das minimum das eingestell werden kann. Von OFF zu 5° muessen wir 0.5° drehen
-    temperature -= 4;
-    temperature = temperature * 2;
-    temperature -= 1;
+
 
     //Error, Encoder steht falsch 
     if ((digitalRead(signalA) == LOW) || (digitalRead(signalB) == LOW)){
         return false;
     }
-
-    //Wir stellen erst au OFF
-    for ( uint8_t i = 0; i < 60; i++){
-        pinMode(signalA, OUTPUT);
-        delay(delayTimeA);
-        pinMode(signalB, OUTPUT);
-        delay(delayTimeB);
-        pinMode(signalA, INPUT);
-        delay(delayTimeA);
-        pinMode(signalB, INPUT);
-        delay(delayTimeB);
+    if (setTemp){
+        if (sollTemp != istTemp){
+            //Wir stellen erst auf OFF
+            for ( uint8_t i = 0; i < 60; i++){
+                pinMode(signalA, OUTPUT);
+                delay(delayTimeA);
+                pinMode(signalB, OUTPUT);
+                delay(delayTimeB);
+                pinMode(signalA, INPUT);
+                delay(delayTimeA);
+                pinMode(signalB, INPUT);
+                delay(delayTimeB);
+            }
+            
+            delay(10);
+            
+            //Wir stellen die Temperatur ein
+            for ( uint8_t i = 0; i < sollTemp; i++){
+                pinMode(signalB, OUTPUT);
+                delay(delayTimeA);
+                pinMode(signalA, OUTPUT);
+                delay(delayTimeB);
+                pinMode(signalB, INPUT);
+                delay(delayTimeA);
+                pinMode(signalA, INPUT);
+                delay(delayTimeB);
+            }
+            istTemp = sollTemp;
+        }
+    }else{
+        if (temperature > 5){
+            //5° ist das minimum das eingestellt werden kann. Von OFF zu 5° muessen wir 0.5° drehen
+            temperature -= 4;
+            temperature = temperature * 2;
+            temperature -= 1;        
+            //Wenn setTemp nicht gesetzt ist merken wir uns die Temperatur nur
+            sollTemp = temperature;
+        }
     }
-    
-    delay(10);
-    
-    //Wir stellen die Temperatur ein
-    for ( uint8_t i = 0; i < temperature; i++){
-        pinMode(signalB, OUTPUT);
-        delay(delayTimeA);
-        pinMode(signalA, OUTPUT);
-        delay(delayTimeB);
-        pinMode(signalB, INPUT);
-        delay(delayTimeA);
-        pinMode(signalA, INPUT);
-        delay(delayTimeB);
-    }
-    
     return true;
 }
 
 void pump_Sensor_Voltage(void){
     
-    for (uint16_t i = 0; i < 130; i++){
+    for (uint16_t i = 0; i < 10000; i++){
         digitalWrite(pumpPin, HIGH);
-        delay(1);
+        //delay(1);
         digitalWrite(pumpPin, LOW);
-        delay(1);
+        //delay(1);
     }
 
 }
@@ -1140,6 +1153,8 @@ void loop()
         }
     }
     
+    set_Temperature(0,true);
+    
     timepassed = millis() - sensorTimeOld;
     //Wir wollen die Sensoren abfragen wenn die Pausezeit vorbei ist, wenn sensorenLesen gesetzt ist, dann lesen wir sofort
     if ((timepassed > SensorPeriod) || (sensorenLesen == true)){
@@ -1191,11 +1206,16 @@ void loop()
         rfm69.sendWithRetry(config[gatewayId], temp, sizeof(temp));
         //Wir pruefen bis der Timeout abgelaufen ist ob noch eine Nachricht kommt
         for (uint16_t i = 0; i <= rxPollTime; i++){
-            radio_Rx_loop();
+            //reset i damit wartezeit von vorne begonnen wird
+            if (radio_Rx_loop()){
+                i = 0;
+            }
             delay(1);
         }
         const char temp2[] = {18};
         rfm69.sendWithRetry(config[gatewayId], temp2, sizeof(temp2));
+        //Die Temperatur einstellen (die Funktion braucht etwas länger)
+        set_Temperature(0,true);
         //Wenn der Watchdog im letzten Schritt nicht getriggert wurde dann rufen wir den Sleep auf
         if (SleepAlowed){
             //Zum leeren des Buffers und senden aller Daten vor den Sleep
