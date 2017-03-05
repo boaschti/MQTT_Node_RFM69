@@ -73,22 +73,17 @@ RFM69 rfm69;
 
 
 //Board Defines--------------------------------------------------------------------------------------------------------
-#include <DHT.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
 #include <U8x8lib.h>
 
+
 //U8X8_SSD1306_64X48_ER_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE);  
 U8X8_SSD1306_128X64_NONAME_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE);  
 
-//device DHT11 Temperature/Humidity
-    #define DHTPIN 16     // what pin we're connected to
-    #define DHTTYPE DHT11   // DHT 11 
-    DHT dht(DHTPIN, DHTTYPE);
-
-// device DS18B20
+//device DS18B20
     #define ONE_WIRE_BUS 9
     OneWire oneWire(ONE_WIRE_BUS);
     DallasTemperature dallas(&oneWire);
@@ -154,7 +149,7 @@ uint8_t eeEncryptKey[16] EEMEM;
 #define readDS18        0           //(Pins s. defines ONE_WIRE_BUS)
 #define readHC05        1           //Ultraschall Sensor (Pins s. defines HC05pingPin und HC05trigPin)
 #define readBME         2           //BME280 und BMP280 (Standart I2C Pins)
-#define readDHT         3           //
+
 
 //Zum kofigurieren von digitalen Aktoren muss man nur angeben welche Aktoren verbaut sind.
 //Bits der Variable digitalOut
@@ -542,15 +537,12 @@ void setup()
         strncat(temp, wert, 3);        
         u8x8.drawString(4,3,temp);       
     }
+    
     if (!oscCalibration()) {
         const char errorString[] = "\"err\":\"oscCal\"";
         rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
     }
     
-    //device DHT
-    if (config[digitalSensors] & (1<<readDHT)){
-        dht.begin();
-    }
     
     //device UART
     if (config[digitalOut] & (1<<uart)){
@@ -894,31 +886,6 @@ void read_Dallas(void)
     }   
 }
 
-void read_DHT(void)
-{
-    
-    //Nach dem einschalten des Sensors muss man min 1sec warten bis der Sensor richtige Daten liefert. Das muss der Aufrufer garantieren.
-    
-    //float h = dht.readHumidity();
-    //float t = dht.readTemperature();
-    float h = 2.1;
-    float t = 30.12;
-        
-    float temp_F;
-    if (isnan(t) || isnan(h)) {
-        write_buffer_str("err", "DHT_read", true);
-        write_buffer_str("","");
-    } else {
-        char Temp[10];
-        //dtostrf(floatVar, minStringWidthIncDecimalPoint, numVarsAfterDecimal, charBuf);			
-        dtostrf(h, 1, 0, Temp);
-        write_buffer_str("DHh", &Temp[0]);
-        temp_F = t * 9/5+32;			
-        dtostrf(temp_F, 3, 1, Temp);
-        write_buffer_str("DHt", &Temp[0]);
-    }
-}
-
 void read_HC05(void){
     //cm = microseconds / 29 / 2;
     write_buffer_str("funk", "HC05 read",true);
@@ -1195,9 +1162,6 @@ void loop()
         if (config[digitalSensors] & (1<<readBME)){
             read_bme();
         }
-        if (config[digitalSensors] & (1<<readDHT)){
-            read_DHT();
-        }		
         read_analog();
     }
     
