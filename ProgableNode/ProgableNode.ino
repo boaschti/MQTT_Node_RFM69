@@ -786,8 +786,7 @@ boolean readMessage(char *message){
     if (resetCPU){
         write_buffer_str("info", "restart_Node", true);
         write_buffer_str("","");	
-        WDTCSR |= (1<<WDCE) | (1<<WDE);
-        WDTCSR |= (1<<WDE) | (1<<WDP1) | (1<<WDP2);
+        wdt_enable(WDTO_15MS);
         while(1);
     }
 }
