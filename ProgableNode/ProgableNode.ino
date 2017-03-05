@@ -443,14 +443,6 @@ void check_improveConfig(void){
 
 void setupPins(void)
 {
-    // Onboard LEDs
-    pinMode(LED_1, OUTPUT);
-    pinMode(LED_2, OUTPUT);
-    pinMode(LED_3, OUTPUT);
-    
-    //reset Pin Rfm
-    pinMode(ResetRfmPin, OUTPUT);
-    
     //starte ADC for readPlant oder readLDR oder readRain
     if (config[math_analog2] || config[math_analog3] || config[math_analog4] || config[math_analog5]){
         //analogReference(INTERNAL);
@@ -481,8 +473,20 @@ void setupPins(void)
             
 }
 
+void setupDefaultPins(void){
+    // Onboard LEDs
+    pinMode(LED_1, OUTPUT);
+    pinMode(LED_2, OUTPUT);
+    pinMode(LED_3, OUTPUT);
+    
+    //reset Pin Rfm
+    pinMode(ResetRfmPin, OUTPUT);
+}
+
 void disableWd(void){
     //Reset WD Timer
+
+    
     MCUSR &= ~(1<<WDRF);
     WDTCSR |= (1<<WDCE) | (1<<WDE);
     WDTCSR = 0;
@@ -495,19 +499,22 @@ void setup()
 
     initVariables();
     check_improveConfig();
-    setupPins();
-    //reset_wdPins(); 
 
+    setupDefaultPins();
+    //reset_wdPins(); 
     
+    digitalWrite(LED_3, HIGH);
+
     //RFM69-------------------------------------------
     //Reset
-
     digitalWrite(ResetRfmPin, HIGH);
-    delay(2);
+    delay(5);
     digitalWrite(ResetRfmPin, LOW);
     delay(10);
     //Init RFM69
+
     rfm69.initialize(FREQUENCY, config[nodeId], config[networkId]);
+
     //rfm69.initialize(FREQUENCY,NODEID,NETWORKID);
     #ifdef IS_RFM69HW
         rfm69.setHighPower(); 
@@ -521,6 +528,9 @@ void setup()
     rfm69.receiveDone();		//goto Rx Mode
   
     //--------------------------------------
+
+    //Spezial Pin Einstellungen laden
+    setupPins();
     
     //ssd1306 Display
     if ((config[digitalOut] & (1<<ssd1306_128x64)) || (config[digitalOut] & (1<<ssd1306_64x48))){
@@ -560,6 +570,8 @@ void setup()
  
     const char errorString[] = "\"info\":\"setup_Node\"";
     rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
+    
+    digitalWrite(LED_3, LOW);
 }
 
  boolean write_buffer_str(char *name, char *wert, boolean strWert = false )
