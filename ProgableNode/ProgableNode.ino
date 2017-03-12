@@ -1108,8 +1108,9 @@ void go_sleep(void){
     }
 }
 
-boolean read_inputs(void){
+boolean read_inputs(boolean readAll = false){
     static boolean readAllInputs = true;
+    readAllInputs |= readAll;
     static uint8_t lastPinState = 0;
     
     //#define bit_write(p,m,c) (c ? bit_set(p,m) : bit_clear(p,m))
@@ -1119,14 +1120,14 @@ boolean read_inputs(void){
             boolean inputState;
             inputState = digitalRead(pinMapping[i]) == HIGH;
             if ((inputState != ((lastPinState & (1 << i)) != 0)) || readAllInputs){
-                char temp[5] = "IN";
+                char temp[5] = "p_";
                 char tempindex[3];
                 char wert[3];
-                itoa(pinMapping[i], tempindex, 10);
+                itoa(i, tempindex, 10);
                 strncat(temp, tempindex, 2);
                 itoa(inputState,wert,10);
                 //Wir wollen uns den aktuellen State nur merken wenn das senden geklappt hat (In der Hoffung dass der Pegel dann noch anliegt)
-                if (write_buffer_str(temp, wert)){
+                if (write_buffer_str(temp, wert, true)){
                     bit_write(lastPinState, i, inputState);
                 }
             }
@@ -1197,6 +1198,8 @@ void loop()
             read_bme();
         }
         read_analog();
+        //sende aktuellen Status der Ports
+        read_inputs(true);
     }
     
     //Lesen der digitalen Inputs
@@ -1249,7 +1252,7 @@ void loop()
     }
 
     //Zum leeren des Buffers und senden aller Daten
-    write_buffer_str("","");
+    //write_buffer_str("","");
     if (config[nodeControll] & (1<<debugLed)){
         digitalWrite(LED_3, HIGH);
     }
