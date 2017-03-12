@@ -175,13 +175,14 @@ uint8_t eeEncryptKey[16] EEMEM;
 //"d_5":"ABC123" -> Zum schreiben eines Strings auf das Display. 5 ist die Zeilen Nummer
 
 //Bytes des Config Arrays
-#define  funktion_pin0          0
-#define  funktion_pin1          1
-#define  funktion_pin17         2
+//Anordnung wie auf der Leiterplatte
+#define  funktion_pin1          0
+#define  funktion_pin0          1
+#define  funktion_pin19         2
 #define  funktion_pin18         3
-#define  funktion_pin19         4
-#define  funktion_pin9          5
-#define  funktion_pin16         6
+#define  funktion_pin9          4
+#define  funktion_pin16         5
+#define  funktion_pin17         6
 
 #define  math_analog2           10
 #define  math_analog3           11
@@ -205,7 +206,7 @@ uint8_t eeEncryptKey[16] EEMEM;
 //In den folgenden Definitionen ist das PinMapping beschrieben: fur digtal IOs config[0]:config[9], fur analog Is config[10]:config[14].
 #define usedDio                 7       //Anzahl der verwendetetn DIOs
 #define usedAnalog              4       //Anzahl der verwendetetn analog In
-const uint8_t pinMapping[15]{0,1,17,18,19,9,16,0,0,0,2,3,4,5,0};
+const uint8_t pinMapping[15]{1,0,19,18,9,16,17,0,0,0,2,3,4,5,0};
 //der SSPin macht noch Probleme Spi funktioniert dann nicht mehr!
 //const uint8_t pinMapping[15]{0,1,17,18,19,9,10,0,0,0,3,4,5,0,0};
 
