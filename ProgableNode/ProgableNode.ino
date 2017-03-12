@@ -56,7 +56,7 @@ Modifications Needed:
 #define LED_2			6 
 #define LED_3			7 
 #define ResetRfmPin		2
-#define rxPollTime		250 // Zeit in ms (ca) die auf eine Message gewartet wird bevor der Node in den Sleep geht
+#define rxPollTime		450 // Zeit in ms (ca) die auf eine Message gewartet wird bevor der Node in den Sleep geht
 
 #define JP_1		  16 //PC2 
 #define JP_2		  15 //PC1
@@ -266,9 +266,9 @@ boolean oscCalibration(void){
 
     #define REF_VAL F_CPU / (REF_CLOCK / 256) / COUNT_PREDIV
 
-    #define REF_MIN REF_VAL - 2
+    #define REF_MIN REF_VAL - 3
 
-    #define REF_MAX REF_VAL + 2
+    #define REF_MAX REF_VAL + 3
 
     //setze clock prescaler auf 2. Internal Clock 8MHZ / 2 = 4MHZ. Das ist das maximum bei minimaler Betriebsspannnung von 1.8V.
     clock_prescale_set(1);
