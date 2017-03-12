@@ -622,6 +622,9 @@ void setup()
         }
         // WIr wollen nur in den Puffer schreiben wenn auch ein Wert uebergeben wurde
         if (wertLength != 0){
+            if (sendBufferPointer > 0){
+                sendBuffer[sendBufferPointer++] = ',';
+            }
             sendBuffer[sendBufferPointer++] = '\"';
 
             for (uint8_t loop = 0; name[loop] != '\0'; loop++)
@@ -643,7 +646,7 @@ void setup()
             if (strWert == true){
                 sendBuffer[sendBufferPointer++] = '\"';
             }
-            sendBuffer[sendBufferPointer++] = ',';
+            //sendBuffer[sendBufferPointer++] = ',';
             sendBuffer[sendBufferPointer] = '\0';
         }
     }
@@ -676,6 +679,10 @@ boolean readMessage(char *message){
     uint8_t i = 0;
     p_start = message;
     while(1) {
+        p_end = strchr(p_start, '/"');
+        if (p_end) {			//search first " to set pointer
+            p_start = p_end;
+        }
         p_end = strchr(p_start, '_'); 
         if (p_end) {							//copy "R"
             strncpy(parts[i], p_start+1, p_end-p_start-1);
