@@ -674,7 +674,7 @@ void sendInt(char *name, uint8_t wert){
 boolean readMessage(char *message){
     // Message str input: "R_12":"125"
     //Diese folgende Schleife macht aus dem String 3 oder eine vielzahl von 3 NULL terminierte Strings
-    //o.g. message ergibt parts[0] == R , parts[1] == 12, parts[2] == 125, i == 2
+    //o.g. message ergibt parts[0] == "R" , parts[1] == "12", parts[2] == "125", i == 2
     char parts[15][10];
     char *p_start, *p_end;
     uint8_t i = 0;
