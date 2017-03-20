@@ -1,0 +1,8 @@
+binary_sensor:
+  - platform: mqtt
+    state_topic: "rfmIn/146/250/p_5"
+    name: "PIR"
+    payload_on: "1"
+    payload_off: "0"  
+    device_class: opening
+    value_template: '{{ value_json.p_5 }}'

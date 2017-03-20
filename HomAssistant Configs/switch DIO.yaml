@@ -1,0 +1,9 @@
+switch:
+  - platform: mqtt
+    name: "Test Switch"
+    state_topic: "rfmIn/146/254/p_4"
+    command_topic: "rfmOut/146/254/1"
+    payload_on: "{\"p_4\":\"1\"}"
+    payload_off: "{\"p_4\":\"0\"}"
+    optimistic: false
+    retain: true

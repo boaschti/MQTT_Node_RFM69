@@ -1,0 +1,11 @@
+sensor:
+  - platform: mqtt
+    state_topic: 'rfmIn/146/254/Bt'
+    name: 'Temp Basti'
+    unit_of_measurement: '°C'
+    value_template: '{{ value_json.Bt }}'
+  - platform: mqtt
+    state_topic: 'rfmIn/146/254/Bh'
+    name: 'Hum Basti'
+    unit_of_measurement: '%'
+    value_template: '{{ value_json.Bh }}'
