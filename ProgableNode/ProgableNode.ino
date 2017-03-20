@@ -156,8 +156,11 @@ uint8_t eeEncryptKey[16] EEMEM;
 #define free            0           
 #define uart            1
 #define dmx             2           //Wenn ein DMX Signal ausgegeben werden soll
-#define ssd1306_64x48   3
-#define ssd1306_128x64  4
+#define ssd1306_64x48   3           //WEMOS Schield mit ssd1306 und 64x48 Pixel, SCL:D1 SDA:D2 VDD:3V3 GND:GND
+#define ssd1306_128x64  4           //Display Board mit ssd1306 und 128x64 Pixel, Board mit 7 Pins: R1,R4,R6,R7:4,7k R8:0 SCL:D0 SDA:D1 VDD:3V3 GND:GND,DC RES*
+//     100nF 10k
+//GND---||---[__]---VDD
+//         |________RES*
 
 //Zum einstellen des Verhaltens der Node:
 //Bits der Variable nodeControll
@@ -536,6 +539,7 @@ void setup()
     //ssd1306 Display
     if ((config[digitalOut] & (1<<ssd1306_128x64)) || (config[digitalOut] & (1<<ssd1306_64x48))){
         //u8x8.setI2CAddress(0x3c);
+        //u8x8.setI2CAddress(0x3d);
         u8x8.begin();
         u8x8.setPowerSave(0);
         u8x8.setContrast(config[contrast]);
@@ -675,7 +679,7 @@ boolean readMessage(char *message){
     // Message str input: "R_12":"125"
     //Diese folgende Schleife macht aus dem String 3 oder eine vielzahl von 3 NULL terminierte Strings
     //o.g. message ergibt parts[0] == "R" , parts[1] == "12", parts[2] == "125", i == 2
-    char parts[15][10];
+    char parts[8][20];
     char *p_start, *p_end;
     uint8_t i = 0;
     p_start = message;
@@ -783,10 +787,10 @@ boolean readMessage(char *message){
         }
         if (strcmp(parts[i] , "d") == 0){
             if (config[digitalOut] & (1<<ssd1306_64x48)){
-                u8x8.drawString(4, (atoi(parts[i + 1])+2), "        ");
+                u8x8.drawString(4, (atoi(parts[i + 1])+2), "            ");
                 u8x8.drawString(4, (atoi(parts[i + 1])+2), parts[i + 2]);
             }else if (config[digitalOut] & (1<<ssd1306_128x64)){
-                u8x8.drawString(0, atoi(parts[i + 1]), "            ");
+                u8x8.drawString(0, atoi(parts[i + 1]), "                        ");
                 u8x8.drawString(0, atoi(parts[i + 1]), parts[i + 2]);
             }
             i += 2;
