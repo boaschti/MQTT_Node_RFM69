@@ -113,6 +113,7 @@ volatile unsigned long WdTrigTimeStamp;
 unsigned long WdPinTimeout;
 volatile boolean SleepAlowed;
 boolean BreakSleep = 0;
+boolean PCinterrupt = 0;
 
 //end Board Defines ---------------------------------------------------------------------------------------------------
 
@@ -131,11 +132,12 @@ uint8_t eeEncryptKey[16] EEMEM;
 //Bits der Variablen funktion_pin..
 #define in_out          0           //DDR wie im Atmel Datenblatt 0=in
 #define port            1           //PORT wie im Atmel Datenblatt 1=High(im outputMode)/1=Pullup(im inputMode)
-#define pcInt           2           //Der Pin loest einen Interrupt aus (aufwachen aus dem Sleep und sofortiges lesen des Pins wenn readInput gesetzt ist)
-#define pwm             3           //todo Der Pin gibt ein software PWM Signal aus
+#define intRise         2           //Der Pin loest einen Interrupt aus (aufwachen aus dem Sleep und sofortiges lesen des Pins wenn readInput gesetzt ist)
+#define intFall         3           //todo Der Pin gibt ein software PWM Signal aus
 #define wdDefault       4           //Zustand in den der watchdog faellt wenn er nicht getriggert wird (nur wenn kein sleep aktiv ist!)
 #define wdReq           5           //Watchdog fuer diesen Pin aktivieren
 #define readInput       6           //Ruecklesen des Pins und senden der Daten (polling fuer Interrupt pcInt setzen)
+#define count           7
 
 //Zum konfigurieren der analog Inputs muss man angeben wie der Wert verrechnet wird.
 //Bits der Variablen math_analog..
@@ -212,6 +214,7 @@ uint8_t eeEncryptKey[16] EEMEM;
 const uint8_t pinMapping[15]{1,0,19,18,9,16,17,0,0,0,2,3,4,5,0};
 //der SSPin macht noch Probleme Spi funktioniert dann nicht mehr!
 //const uint8_t pinMapping[15]{0,1,17,18,19,9,10,0,0,0,3,4,5,0,0};
+unsigned long counter[usedDio];
 
 #define bit_set(p,m) ((p) |= (1<<m))
 #define bit_clear(p,m) ((p) &= ~(1<<m))
@@ -242,7 +245,10 @@ void pciSetup(byte pin)
     PCICR  |= bit (digitalPinToPCICRbit(pin)); // enable interrupt for the group
 }
 
-
+void pciDisable(byte pin)
+{
+    *digitalPinToPCMSK(pin) &= ~bit (digitalPinToPCMSKbit(pin));  // disable pin
+}
 
 boolean oscCalibration(void){
     
@@ -273,6 +279,7 @@ boolean oscCalibration(void){
 
     #define REF_MAX REF_VAL + 3
 
+    cli();
     //setze clock prescaler auf 2. Internal Clock 8MHZ / 2 = 4MHZ. Das ist das maximum bei minimaler Betriebsspannnung von 1.8V.
     clock_prescale_set(1);
     
@@ -322,7 +329,7 @@ boolean oscCalibration(void){
     //OSCAL in die "Mitte" setzen, da wir die Schleife nur jedes zweite Mal auswerten
     OSCCAL = 128;
     
-    cli();
+    
     while(nTimeOut){
         //Poll Timer2    
         if(TIFR2 & (1 << TOV2)){
@@ -410,7 +417,7 @@ void initVariables(void)
     //Alle Pins auf Eingang
     //keine Sensoren aktiv
     //es kann bei der ersten Inbetriebnahme zu Problemen (haengt beim Sensor lesen) kommen wenn diese Variable nicht auf 255 steht
-    if ((eeprom_read_byte(&eeConfig[funktion_pin0]) == 255) || getJumper()){
+    if ((eeprom_read_byte(&eeConfig[0]) == 255) || getJumper()){
     //if (eeprom_read_byte(&eeConfig[0]) == 255){
         for (uint8_t i = 0; i < configSize-5; i++){
             eeprom_write_byte(&eeConfig[i], 0);
@@ -425,6 +432,11 @@ void initVariables(void)
     
     for (uint8_t i = 0; i < configSize; i++){
         config[i] = eeprom_read_byte(&eeConfig[i]);
+    }
+    
+    //reset Pin Counters
+    for (uint8_t i = 0; i < usedDio; i++){
+        counter[i] = 0;
     }
     
     SensorPeriod = config[sensorDelay] * 10000;
@@ -460,7 +472,7 @@ void setupPins(void)
             pinMode(pinMapping[i], (config[i] & (1<<in_out)));
             digitalWrite(pinMapping[i], (config[i] & (1<<port)));
         }
-        if (config[i] & (1 << pcInt)){	
+        if (config[i] & (1 << intRise)){	
             pciSetup(pinMapping[i]);
         }
     }	
@@ -1036,6 +1048,7 @@ void pump_Sensor_Voltage(void){
 void go_sleep(void){
     
     BreakSleep = false;
+    PCinterrupt = false;
     
     if (config[nodeControll] & (1<<debugLed)){
         digitalWrite(LED_2, LOW);
@@ -1085,6 +1098,9 @@ void go_sleep(void){
 
         if (BreakSleep){		//Sleep untebrechen wenn ein Interrupt von einem Eingang kam
             break;
+        }else if (PCinterrupt){
+            PCinterrupt = false;
+            i--;
         }
         
     }
@@ -1118,12 +1134,16 @@ boolean read_inputs(boolean readAll = false){
     static uint8_t lastPinState = 0;
     
     //#define bit_write(p,m,c) (c ? bit_set(p,m) : bit_clear(p,m))
-    
+
     for (uint8_t i = 0; i<usedDio; i++){
-        if (config[i] & (1<<readInput)){
-            boolean inputState;
-            inputState = digitalRead(pinMapping[i]) == HIGH;
-            if ((inputState != ((lastPinState & (1 << i)) != 0)) || readAllInputs){
+        boolean inputState;
+        inputState = digitalRead(pinMapping[i]) == HIGH;
+        //wenn beide Interrupts und der Input nicht gezählt werden soll, dann wachen wir auch auf. Fuer eine eventuelle Wakup Taste damit das Display was anzeigt
+        if ((config[i] & (1<<intFall)) && (config[i] & (1<<intRise)) && (!(config[i] & (1<<count)))) {
+            BreakSleep = true;
+        }
+        if ((inputState != ((lastPinState & (1 << i)) != 0)) || readAllInputs){
+            if (config[i] & (1<<readInput)){
                 char temp[5] = "p_";
                 char tempindex[3];
                 char wert[3];
@@ -1134,11 +1154,46 @@ boolean read_inputs(boolean readAll = false){
                 if (write_buffer_str(temp, wert, true)){
                     bit_write(lastPinState, i, inputState);
                 }
+                BreakSleep = true;
+            }else{
+                bit_write(lastPinState, i, inputState);
+            }
+            //setzen oder reseten der Pin change interrupts
+            
+            if (inputState){
+                if (config[i] & (1<<intFall)){
+                    pciSetup(pinMapping[i]);
+                }else{
+                    pciDisable(pinMapping[i]);
+                }
+                if (config[i] & (1<<count)){
+                    counter[i]++;
+                }
+            }else{
+                if (config[i] & (1<<intRise)){
+                    pciSetup(pinMapping[i]);
+                }else{
+                    pciDisable(pinMapping[i]);
+                }
             }
         }
     }	
     readAllInputs = false;
     return 0;
+}
+
+void read_counters(void){
+  for ( uint8_t i = 0; i <usedDio; i++){
+      if (config[i] & (1<<count)){
+          char temp[5] = "c_";
+          char tempindex[3];
+          char wert[10];
+          itoa(i, tempindex, 10);
+          strncat(temp, tempindex, 2);
+          ltoa(counter[i],wert,10);
+          write_buffer_str(temp, wert);
+      }
+  }
 }
 
 void reset_wdPins(void){
@@ -1202,6 +1257,7 @@ void loop()
             read_bme();
         }
         read_analog();
+        read_counters();
         //sende aktuellen Status der Ports
         read_inputs(true);
     }
@@ -1267,21 +1323,21 @@ ISR (PCINT0_vect)
 {
     sleep_disable();        // first thing after waking from sleep:
     read_inputs();
-    BreakSleep = true;
+    PCinterrupt = true;
 }
 
 ISR (PCINT1_vect)
 {
     sleep_disable();        // first thing after waking from sleep:
     read_inputs();
-    BreakSleep = true;
+    PCinterrupt = true;
 }
 
 ISR (PCINT2_vect)
 {
     sleep_disable();        // first thing after waking from sleep:
     read_inputs();
-    BreakSleep = true;
+    PCinterrupt = true;
 }
 
 ISR (WDT_vect)
