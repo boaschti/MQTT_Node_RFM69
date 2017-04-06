@@ -114,8 +114,9 @@ unsigned long SensorPeriod;
 volatile unsigned long WdTrigTimeStamp;
 unsigned long WdPinTimeout;
 volatile boolean SleepAlowed;
-boolean BreakSleep = 0;
-boolean PCinterrupt = 0;
+boolean BreakSleep = false;
+boolean PCinterrupt = false;
+boolean SendAlowed = true;
 
 //end Board Defines ---------------------------------------------------------------------------------------------------
 
@@ -619,18 +620,31 @@ void setup()
         messageOverhead = messageOverheadDec;
     }
     
+    //Wir merken uns wann das Senden das letzte Mal schief ging und reseten ggf die Sperre
+    static unsigned long sendTimeOld;
+    unsigned long timepassed;
+    timepassed = millis() - sendTimeOld;
+    
+    if (timepassed >= 10000){
+      sendTimeOld = millis();
+      SendAlowed = true;
+    }
+    
     //Es wird geprueft ob die Nachricht ueberhaupt in den Buffer passt ansonsten senden wir eine Fehlermeldung
     if ((nameLength + wertLength + messageOverhead) <= RF69_MAX_DATA_LEN)
     {
         //Wir pruefen ob die Nachricht zusaetlich in den Buffer passt ansonsten schicken wir zuerst alle Daten weg
         //Wenn die wertLange 0 ist, und Daten, die noch nicht gesendet worden sind vorliegen, dann wollen wir diese senden 
-        if (((nameLength + wertLength + sendBufferPointer + messageOverhead) > RF69_MAX_DATA_LEN) || ((wertLength == 0) && (sendBufferPointer > 0))){
+        if (SendAlowed&&(((nameLength + wertLength + sendBufferPointer + messageOverhead) > RF69_MAX_DATA_LEN) || ((wertLength == 0) && (sendBufferPointer > 0)))){
             if (!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer)){
                 //Wir konnten nicht senden-> wir warten und probieren es noch einmal
                 delay(config[nodeId]*1.3);
                 if (!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer)){
                     //Ein Fehler ist aufgetreten wir merken uns den Bufferinhalt
                     radio_Rx_loop(); //RFM->RXMode
+                    //Wir verbieten das Senden und merken uns den Zeitstempel damit diese Node nicht sofort wieder senden will und die Frequenz blokiert
+                    sendTimeOld = millis();
+                    SendAlowed = false;
                     return false;
                 }else{
                     sendBufferPointer = 0;
@@ -639,38 +653,41 @@ void setup()
                 sendBufferPointer = 0;
             }
         }
-        // WIr wollen nur in den Puffer schreiben wenn auch ein Wert uebergeben wurde
-        if (wertLength != 0){
-            if (sendBufferPointer > 0){
-                sendBuffer[sendBufferPointer++] = ',';
-            }
-            sendBuffer[sendBufferPointer++] = '\"';
-
-            for (uint8_t loop = 0; name[loop] != '\0'; loop++)
-            {
-                sendBuffer[sendBufferPointer++] = name[loop];
-            }
-
-            sendBuffer[sendBufferPointer++] = '\"';
-            sendBuffer[sendBufferPointer++] = ':';
-            if (strWert == true){
+        if ((nameLength + wertLength + sendBufferPointer + messageOverhead) < RF69_MAX_DATA_LEN){
+        // WIr wollen nur in den Puffer schreiben wenn auch ein Wert uebergeben wurde und der Buffer leer ist
+            if (wertLength != 0){
+                if (sendBufferPointer > 0){
+                    sendBuffer[sendBufferPointer++] = ',';
+                }
                 sendBuffer[sendBufferPointer++] = '\"';
-            }
 
-            for (uint8_t loop = 0; loop < wertLength; loop++)
-            {
-                sendBuffer[sendBufferPointer++] = ((char*)(wert))[loop];
-            }
+                for (uint8_t loop = 0; name[loop] != '\0'; loop++)
+                {
+                    sendBuffer[sendBufferPointer++] = name[loop];
+                }
 
-            if (strWert == true){
                 sendBuffer[sendBufferPointer++] = '\"';
+                sendBuffer[sendBufferPointer++] = ':';
+                if (strWert == true){
+                    sendBuffer[sendBufferPointer++] = '\"';
+                }
+
+                for (uint8_t loop = 0; loop < wertLength; loop++)
+                {
+                    sendBuffer[sendBufferPointer++] = ((char*)(wert))[loop];
+                }
+
+                if (strWert == true){
+                    sendBuffer[sendBufferPointer++] = '\"';
+                }
+                //sendBuffer[sendBufferPointer++] = ',';
+                sendBuffer[sendBufferPointer] = '\0';
             }
-            //sendBuffer[sendBufferPointer++] = ',';
-            sendBuffer[sendBufferPointer] = '\0';
+        }else{
+          //Wenn der Buffer nicht leer ist und nicht beschrieben wurde geben wir ein false zurück
+          return false;
         }
-    }
-    else
-    {
+    }else{
         const char errorString[] = "\"err\":\"Message to long\"";
         rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
         radio_Rx_loop(); //RFM->RXMode
@@ -1097,7 +1114,7 @@ void go_sleep(void){
         sei();
         
         sleep_mode();           // here the device is actually put to sleep!!
-
+        
         if (BreakSleep){		//Sleep untebrechen wenn ein Interrupt von einem Eingang kam
             break;
         }else if (PCinterrupt){
@@ -1111,7 +1128,8 @@ void go_sleep(void){
     PRR = oldPRR;
     ADMUX = oldADMUX;
     ADCSRA = oldADCSRA;
-    
+    SendAlowed = true;
+
     if (config[digitalSensors] & (1<<readBME)){
         bme.normalMode();
     }
@@ -1141,8 +1159,8 @@ boolean read_inputs(boolean readAll = false){
         boolean inputState;
         inputState = digitalRead(pinMapping[i]) == HIGH;
         //wenn beide Interrupts und der Input nicht gezählt werden soll, dann wachen wir auch auf. Fuer eine eventuelle Wakup Taste damit das Display was anzeigt
-        if ((config[i] & (1<<intFall)) && (config[i] & (1<<intRise)) && (!(config[i] & (1<<count)))) {
-            BreakSleep = true;
+        if ((config[i] & (1<<intFall)) && (config[i] & (1<<intRise)) && (!config[i] & (1<<count))) {
+            //BreakSleep = true;
         }
         if ((inputState != ((lastPinState & (1 << i)) != 0)) || readAllInputs){
             if (config[i] & (1<<readInput)){
@@ -1324,21 +1342,30 @@ void loop()
 ISR (PCINT0_vect)
 {
     sleep_disable();        // first thing after waking from sleep:
+    boolean oldSendAlowed = SendAlowed;
+    SendAlowed = false;
     read_inputs();
+    SendAlowed = oldSendAlowed;
     PCinterrupt = true;
 }
 
 ISR (PCINT1_vect)
 {
     sleep_disable();        // first thing after waking from sleep:
+    boolean oldSendAlowed = SendAlowed;
+    SendAlowed = false;
     read_inputs();
+    SendAlowed = oldSendAlowed;
     PCinterrupt = true;
 }
 
 ISR (PCINT2_vect)
 {
     sleep_disable();        // first thing after waking from sleep:
+    boolean oldSendAlowed = SendAlowed;
+    SendAlowed = false;
     read_inputs();
+    SendAlowed = oldSendAlowed;
     PCinterrupt = true;
 }
 
