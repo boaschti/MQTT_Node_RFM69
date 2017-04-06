@@ -79,6 +79,8 @@ RFM69 rfm69;
 #include <Adafruit_BME280.h>
 #include <U8x8lib.h>
 
+#define F_CPU 4000000UL
+
 
 //U8X8_SSD1306_64X48_ER_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE);  
 U8X8_SSD1306_128X64_NONAME_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE);  
