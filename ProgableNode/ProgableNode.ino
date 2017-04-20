@@ -1305,7 +1305,9 @@ void loop()
     if((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0) && SleepAlowed){
         //Wir senden eine dec11 damit das Gateway diese Node beim Broker subscibed und wir retained Messages erhalten
         const char temp[] = {17};
-        rfm69.sendWithRetry(config[gatewayId], temp, sizeof(temp));
+        if (SendAlowed) {
+            rfm69.sendWithRetry(config[gatewayId], temp, sizeof(temp));
+        }
         //Wir pruefen bis der Timeout abgelaufen ist ob noch eine Nachricht kommt
         for (uint16_t i = 0; i <= rxPollTime; i++){
             //reset i damit wartezeit von vorne begonnen wird
@@ -1315,7 +1317,9 @@ void loop()
             delay(1);
         }
         const char temp2[] = {18};
-        rfm69.sendWithRetry(config[gatewayId], temp2, sizeof(temp2));
+        if (SendAlowed) {
+            rfm69.sendWithRetry(config[gatewayId], temp2, sizeof(temp2));
+        }
         //Die Temperatur einstellen (die Funktion braucht etwas länger)
         set_Temperature(0,true);
         //Wenn der Watchdog im letzten Schritt nicht getriggert wurde dann rufen wir den Sleep auf
