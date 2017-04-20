@@ -42,7 +42,7 @@ Modifications Needed:
 
 //Standardkonfig wird uebernommen wenn JP_2 == GND oder funktion_pin0 == 255 (Komando "w_0":"255")
 #define DEFAULTNODEID        254                    //nur einmal im Netzwerk vorhanden
-#define DEFAULTNETWORKID     146                    //bei allen Nodes im Netzwerk gleich
+#define DEFAULTNETWORKID     1                      //bei allen Nodes im Netzwerk gleich
 #define DEFAULTGATEWAYID     1      
 #define DEFAULTENCRYPTKEY    "sampleEncryptKey"     //exakt 16 Zeichen, gleich auf allen Nodes in diesem Netzwerk
 
@@ -587,7 +587,15 @@ void setup()
             rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
         }
     }
- 
+    
+    //Wenn die Node keinen Sleep hat teilen wir die dem Gateway mit einer 19 mit 
+    if (!(config[sleepTime])){
+        const char temp[] = {17};
+        if (SendAlowed) {
+            rfm69.sendWithRetry(config[gatewayId], temp, sizeof(temp));
+        }
+    }
+        
     const char errorString[] = "\"info\":\"setup_Node\"";
     rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
     
