@@ -145,7 +145,12 @@ switch:
     optimistic: true
     retain: true
 ```
- 
+
+### Hardware
+![alt text](https://github.com/boaschti/MQTT_Node_RFM69/blob/master/pictures/nodeHardware.jpg)
+![alt text](https://github.com/boaschti/MQTT_Node_RFM69/blob/master/pictures/nodeHardware2.jpg)
+
+
 ### Housing
 
 **3AAA_PIR_Node**
