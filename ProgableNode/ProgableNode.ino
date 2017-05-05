@@ -121,7 +121,7 @@ boolean SendAlowed = true;
 //end Board Defines ---------------------------------------------------------------------------------------------------
 
 
-#define configSize 31
+#define configSize 33
 
 uint8_t eeConfig[configSize] EEMEM;
 uint8_t config[configSize];
@@ -210,6 +210,8 @@ uint8_t eeEncryptKey[16] EEMEM;
 #define  networkId              28    //NetworkID dieses Sensors (alle gleich im Netzwerk)
 #define  gatewayId              29    //GatewayID an diese Addresse werden die Daten geschickt und es werden nur Daten von dieser Addresse beruecksichitgt. Sollten Daten von einer Anderen Adresse kommen werden sie an das Gateway weitergeleitet.
 #define  sensorDelay            30    //Messpause der Sensoren in * 10 sec (Nur wenn sleepTime == 0 konfiguriert ist oder der watchdog durch staendiges Nachtriggern den Sleep blokiert)
+#define  firstEEPromInit        31    //internal
+#define  oscCalError            32    //internal
 
 //In den folgenden Definitionen ist das PinMapping beschrieben: fur digtal IOs config[0]:config[9], fur analog Is config[10]:config[14].
 #define usedDio                 7       //Anzahl der verwendetetn DIOs
@@ -420,7 +422,7 @@ void initVariables(void)
     //Alle Pins auf Eingang
     //keine Sensoren aktiv
     //es kann bei der ersten Inbetriebnahme zu Problemen (haengt beim Sensor lesen) kommen wenn diese Variable nicht auf 255 steht
-    if ((eeprom_read_byte(&eeConfig[0]) == 255) || getJumper()){
+    if ((eeprom_read_byte(&eeConfig[0]) == 255) || (eeprom_read_byte(&eeConfig[firstEEPromInit]) != 0xAF) || getJumper()){
     //if (eeprom_read_byte(&eeConfig[0]) == 255){
         for (uint8_t i = 0; i < configSize-5; i++){
             eeprom_write_byte(&eeConfig[i], 0);
@@ -429,7 +431,9 @@ void initVariables(void)
         eeprom_write_byte(&eeConfig[nodeId], DEFAULTNODEID);
         eeprom_write_byte(&eeConfig[networkId], DEFAULTNETWORKID);
         eeprom_write_byte(&eeConfig[gatewayId], DEFAULTGATEWAYID);
-        eeprom_write_byte(&eeConfig[sensorDelay], 2);	
+        eeprom_write_byte(&eeConfig[sensorDelay], 2);
+        eeprom_write_byte(&eeConfig[firstEEPromInit], 0xAF);
+        eeprom_write_byte(&eeConfig[oscCalError], 0);
         //eeprom_write_block(eeEncryptKey, DEFAULTENCRYPTKEY, 16);
     }
     
@@ -570,8 +574,17 @@ void setup()
         u8x8.drawString(4,3,temp);       
     }
     
-    if (!oscCalibration()) {
-        const char errorString[] = "\"err\":\"oscCal\"";
+    if (!(eeprom_read_byte(&eeConfig[oscCalError]))){
+        eeprom_write_byte(&eeConfig[oscCalError], 1);
+        wdt_enable(WDTO_8S);
+        if (!oscCalibration()) {
+            const char errorString[] = "\"err\":\"oscCal\"";
+            rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
+        }
+        eeprom_write_byte(&eeConfig[oscCalError], 0);
+        disableWd();
+    }else{
+        const char errorString[] = "\"err\":\"oscCal_skiped\"";
         rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
     }
     
@@ -596,6 +609,9 @@ void setup()
         }
     }
         
+    //reset oscal error damit der oscal beim nächten MAl wieder ausgeführt wird
+    eeprom_write_byte(&eeConfig[oscCalError], 0);
+
     const char errorString[] = "\"info\":\"setup_Node\"";
     rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
     
