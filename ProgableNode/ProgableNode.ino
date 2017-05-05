@@ -603,7 +603,7 @@ void setup()
     
     //Wenn die Node keinen Sleep hat teilen wir die dem Gateway mit einer 19 mit 
     if (!(config[sleepTime])){
-        const char temp[] = {17};
+        const char temp[] = {19};
         if (SendAlowed) {
             rfm69.sendWithRetry(config[gatewayId], temp, sizeof(temp));
         }
@@ -614,7 +614,7 @@ void setup()
 
     const char errorString[] = "\"info\":\"setup_Node\"";
     rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
-    
+
     digitalWrite(LED_3, LOW);
 }
 
@@ -783,18 +783,19 @@ boolean readMessage(char *message){
     //parts[1]
     // last part parts[i]
     /*
-        write_buffer_str("part0", parts[0], true);
-        write_buffer_str("part1", parts[1], false);
-        write_buffer_str("part2", parts[2], false);
-        write_buffer_str("part3", parts[3], false);
-        write_buffer_str("part4", parts[4], false);
-        write_buffer_str("part5", parts[5], false);
-        write_buffer_str("part6", parts[6], false);
-        write_buffer_str("part7", parts[7], false);
-        write_buffer_str("part8", parts[8], false);
-        write_buffer_str("part9", parts[9], false);
-        rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferLength);
-        */
+        write_buffer_str("part0", parts[0]);
+        write_buffer_str("part1", parts[1]);
+        write_buffer_str("part2", parts[2]);
+        write_buffer_str("part3", parts[3]);
+        write_buffer_str("part4", parts[4]);
+        write_buffer_str("part5", parts[5]);
+        write_buffer_str("part6", parts[6]);
+        write_buffer_str("part7", parts[7]);
+        write_buffer_str("part8", parts[8]);
+        write_buffer_str("part9", parts[9]);
+        write_buffer_str("","");
+    */
+        
     uint8_t listLen = i;
     boolean resetCPU = false;
     
