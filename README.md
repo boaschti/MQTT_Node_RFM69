@@ -43,7 +43,7 @@ The board you can order [here](https://www.itead.cc/) or other PCB Services. You
 - programmable sleep times
 - programmable sensor measure times
 - programmable watchdog times
-- and more... you can see [here](https://github.com/boaschti/MQTT_WLan_RFM69_Gateway)
+- and more... you can see [here](https://github.com/boaschti/MQTT_WLan_RFM69_Gateway/blob/master/pictures/nodeConfig.jpg)
  
 ### Home Assistant config
 note: use different command_topic (anyChar). The topic from broker to node is rfmOut/networkId/nodeId/anyChar, the topic from node to broker is rfmIn/networkId/nodeId/jsonValue
@@ -76,7 +76,7 @@ sensor:
     name: 'Counter'
     value_template: '{{ value_json.c_4 }}'
   - platform: mqtt
-    state_topic: 'rfmIn/146/254/rxinfo'
+    state_topic: 'rfmIn/146/254/rxInfo'
     name: 'RSSI'
     value_template: '{{ value_json.rssi }}'
 ```
@@ -156,9 +156,15 @@ switch:
 **3AAA_PIR_Node**
 ![alt text](https://github.com/boaschti/MQTT_Node_RFM69/blob/master/pictures/3AAA_pir_node.jpg)
  
-**3AAA_PIR_Node inside, modification PIR**
-![alt text](https://github.com/boaschti/MQTT_Node_RFM69/blob/master/pictures/3AAA_pir_node_inside.jpg)
+**3AAA_PIR_Node inside, modification PIR (nFet or diode bat46 4148 ect)**
+![alt text](https://github.com/boaschti/MQTT_Node_RFM69/blob/master/pictures/3AAA_pir_node.jpg)
  
+**2AAA_Node**
+![alt text](https://github.com/boaschti/MQTT_Node_RFM69/blob/master/pictures/2AAA_node.jpg)
+
+**2AAA_Node_inside**
+![alt text](https://github.com/boaschti/MQTT_Node_RFM69/blob/master/pictures/2AAA_node_inside.jpg)
+
 **Display_housing**
 ![alt text](https://github.com/boaschti/MQTT_Node_RFM69/blob/master/pictures/dispayHousing.jpg)
  
