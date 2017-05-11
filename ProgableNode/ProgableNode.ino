@@ -121,11 +121,13 @@ boolean SendAlowed = true;
 //end Board Defines ---------------------------------------------------------------------------------------------------
 
 
-#define configSize 33
+#define configSize 31
+#define configSizeInternal 2
+#define configSizeAll configSize + configSizeInternal
 
-uint8_t eeConfig[configSize] EEMEM;
-uint8_t config[configSize];
-uint8_t eeEncryptKey[16] EEMEM;
+uint8_t eeConfig[configSizeAll] EEMEM;
+uint8_t config[configSizeAll];
+uint8_t eeEncryptKey[16+1] EEMEM;
 
 
 //Folgende Definitionen zeigen die Bit stellen der einstellbaren Funktionen.
@@ -423,8 +425,8 @@ void initVariables(void)
     //keine Sensoren aktiv
     //es kann bei der ersten Inbetriebnahme zu Problemen (haengt beim Sensor lesen) kommen wenn diese Variable nicht auf 255 steht
     if ((eeprom_read_byte(&eeConfig[0]) == 255) || (eeprom_read_byte(&eeConfig[firstEEPromInit]) != 0xAF) || getJumper()){
-    //if (eeprom_read_byte(&eeConfig[0]) == 255){
-        for (uint8_t i = 0; i < configSize-5; i++){
+    //if (1){
+        for (uint8_t i = 0; i < configSizeAll - 5; i++){
             eeprom_write_byte(&eeConfig[i], 0);
         }
         eeprom_write_byte(&eeConfig[contrast], 255);        
@@ -434,10 +436,10 @@ void initVariables(void)
         eeprom_write_byte(&eeConfig[sensorDelay], 2);
         eeprom_write_byte(&eeConfig[firstEEPromInit], 0xAF);
         eeprom_write_byte(&eeConfig[oscCalError], 0);
-        //eeprom_write_block(eeEncryptKey, DEFAULTENCRYPTKEY, 16);
+        eeprom_write_block(DEFAULTENCRYPTKEY,  &eeEncryptKey, 16+1);
     }
     
-    for (uint8_t i = 0; i < configSize; i++){
+    for (uint8_t i = 0; i < configSizeAll; i++){
         config[i] = eeprom_read_byte(&eeConfig[i]);
     }
     
@@ -543,10 +545,10 @@ void setup()
         rfm69.setHighPower(); 
     #endif
     rfm69.setPowerLevel(RFM_POWER_LEVEL);
-    //char temp[16];
-    //eeprom_read_block(temp, eeEncryptKey, 16);
-    //rfm69.encrypt(&temp[0]);
-    rfm69.encrypt(DEFAULTENCRYPTKEY);
+    char temp[16+1];
+    eeprom_read_block(temp, eeEncryptKey, 16+1);
+    rfm69.encrypt(temp);
+    //rfm69.encrypt(DEFAULTENCRYPTKEY);
 
     rfm69.receiveDone();		//goto Rx Mode
   
@@ -811,7 +813,7 @@ boolean readMessage(char *message){
             if (atoi(parts[i + 1]) < configSize){
                 eeprom_write_byte(&eeConfig[atoi(parts[i + 1])], atoi(parts[i + 2]));
                 config[atoi(parts[i + 1])] = eeprom_read_byte(&eeConfig[atoi(parts[i + 1])]);
-                char temp[10] = "infoReg";
+                char temp[10] = "w_";
                 strncat(temp, parts[i+1],2);
                 sendInt(temp, config[atoi(parts[i + 1])]);
                 i += 2;
@@ -821,10 +823,23 @@ boolean readMessage(char *message){
         }
         //zum lesen der Config
         if (strcmp(parts[i] , "r") == 0){
-            char temp[10] = "infoReg";
+            char temp[10] = "w_";
             strncat(temp, parts[i+1],2);
             sendInt(temp, config[atoi(parts[i + 1])]);
             i += 2;
+        }
+        //zum lesen der gesamten konfig rAll
+        if (strcmp(parts[i] , "rAll") == 0){
+            for (uint8_t i = 0; i<configSize; i++){
+                if (config[i] != 0){
+                    char temp[5] = "w_";
+                    char temp2[4];
+                    itoa(i, temp2, 10);
+                    strncat(temp, temp2, 4);
+                    itoa(config[i], temp2, 10);               
+                    write_buffer_str(temp, temp2, true);
+                }
+            }
         }
         //zum setzen von Ports
         if (strcmp(parts[i] , "p") == 0){
@@ -835,11 +850,22 @@ boolean readMessage(char *message){
             //todo Ports nicht setzen wenn Watchdog abgelaufen ist
             if (strcmp(parts[i+2] , "1") == 0){
                 digitalWrite(pinMapping[atoi(parts[i + 1])],HIGH);
-            }else{
+            }else if (strcmp(parts[i+2] , "0") == 0){
                 digitalWrite(pinMapping[atoi(parts[i + 1])],LOW);
             }
             //damit der Status zurueck gesendet wird setze das Bit "readInput" fuer den jeweiligen Port 
             i += 2;
+        }
+        if (strcmp(parts[i] , "led") == 0){
+            if (strcmp(parts[i+2] , "blink") == 0){
+                digitalWrite(LED_3, HIGH);
+                delay(100);
+                digitalWrite(LED_3, LOW);
+            }                
+        }
+        if (strcmp(parts[i] , "key") == 0){
+            eeprom_write_block(parts[i+2],  &eeEncryptKey, 16+1);
+            resetCPU = true;
         }
         if (strcmp(parts[i] , "d") == 0){
             if (config[digitalOut] & (1<<ssd1306_64x48)){
@@ -1328,7 +1354,7 @@ void loop()
     }
 
     if((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0) && SleepAlowed){
-        //Wir senden eine dec11 damit das Gateway diese Node beim Broker subscibed und wir retained Messages erhalten
+        //Wir senden eine dec17 damit das Gateway diese Node beim Broker subscibed und wir retained Messages erhalten
         const char temp[] = {17};
         if (SendAlowed) {
             rfm69.sendWithRetry(config[gatewayId], temp, sizeof(temp));
