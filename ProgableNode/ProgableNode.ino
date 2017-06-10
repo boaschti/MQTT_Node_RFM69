@@ -150,6 +150,9 @@ uint8_t eeEncryptKey[16+1] EEMEM;
 #define readLDR         1           //Photo Widerstand 10k pulldown
 #define readRain        2           //Arduino Regen Sensor
 #define readRaw         3           //raw adc Wert
+#define readVolt        4           //reads voltage of a ADC
+#define multi2         6            //multiply ADC / 2 
+#define multi4         7            //multiply ADC / 4 
 
 //Zum konfigurieren der digitalen Sensoren muss man nur angeben welche Sensoren gelesen werden sollen.
 //Bits der Variable digitalsensors
@@ -1009,7 +1012,7 @@ uint16_t read_Vcc(boolean sendWert = true){
     while (bit_is_set(ADCSRA,ADSC));
     result = ADCL;
     result |= ADCH<<8;	
-    result = 1126400 / result; //1024 * Vbandgap(1100mV) / ADC_Wert
+    result = 1111100 / result; //1023 * Vbandgap(1100mV) / ADC_Wert (-1.35%)
     //Wir brauchen die Funktion auch fuer interne Zwecke
     if (sendWert){
         char temp[10];
@@ -1028,8 +1031,8 @@ void read_analog(void){
             char wert[7];
             itoa(pinMapping[i], tempindex, 10);
             strncat(temp, tempindex, 2);
-            uint16_t OutputWert;
-            OutputWert = analogRead(pinMapping[i]);
+            uint16_t adcValue;
+            adcValue = analogRead(pinMapping[i]);
             if (config[i] & (1<<readPlant)){
                 
             }else if (config[i] & (1<<readRain)){
@@ -1041,8 +1044,19 @@ void read_analog(void){
                 
             }else if (config[i] & (1<<readRaw)){
                 //Wir muessen nichts berechnen
+            }else if (config[i] & (1<<readVolt)){
+                uint16_t Vref = read_Vcc(false);
+                float voltPerCount = Vref / 1023.0;
+                voltPerCount *= adcValue;                
+                adcValue = voltPerCount;
             }
-            itoa(OutputWert,wert,10);
+            if (config[i] & (1<<multi2)){
+                adcValue *= 2;
+            }
+            if (config[i] & (1<<multi4)){
+                adcValue *= 4;
+            }
+            itoa(adcValue,wert,10);
             write_buffer_str(temp,wert);
         }   
     }
