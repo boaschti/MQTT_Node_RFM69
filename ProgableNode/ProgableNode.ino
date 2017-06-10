@@ -1093,13 +1093,15 @@ boolean set_Temperature(uint8_t temperature, boolean setTemp = false){
             istTemp = sollTemp;
         }
     }else{
-        if (temperature > 5){
+        if (temperature >= 5){
             //5° ist das minimum das eingestellt werden kann. Von OFF zu 5° muessen wir 0.5° drehen
             temperature -= 4;
             temperature = temperature * 2;
             temperature -= 1;        
             //Wenn setTemp nicht gesetzt ist merken wir uns die Temperatur nur
             sollTemp = temperature;
+        }else{
+            sollTemp = 0;
         }
     }
     return true;
