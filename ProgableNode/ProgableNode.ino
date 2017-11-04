@@ -116,6 +116,7 @@ unsigned long WdPinTimeout;
 volatile boolean SleepAlowed;
 boolean BreakSleep = false;
 boolean PCinterrupt = false;
+boolean InputAlredyRead = false;
 boolean SendAlowed = true;
 boolean Startup = true;
 
