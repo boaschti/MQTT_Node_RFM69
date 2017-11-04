@@ -1322,7 +1322,6 @@ void loop()
         if ((sensorenLesen == true) && (config[digitalSensors] & (1<<readDS18))){ 
             delay(1000);
         }
-        sensorenLesen = false;
         sensorTimeOld = millis();
         //Wenn eine SleepTime configuriert ist gehen wir davon aus dass die Batteriespanung auch gelesen werden soll
         if (config[sleepTime] > 0){
@@ -1340,7 +1339,9 @@ void loop()
         read_analog();
         read_counters();
         //sende aktuellen Status der Ports
-        read_inputs(true);
+        read_inputs(!InputAlredyRead);
+        InputAlredyRead = false;
+        sensorenLesen = false;
     }
     
     //Lesen der digitalen Inputs
