@@ -117,6 +117,7 @@ volatile boolean SleepAlowed;
 boolean BreakSleep = false;
 boolean PCinterrupt = false;
 boolean SendAlowed = true;
+boolean Startup = true;
 
 //end Board Defines ---------------------------------------------------------------------------------------------------
 
@@ -593,7 +594,6 @@ void setup()
         rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
     }
     
-    
     //device UART
     if (config[digitalOut] & (1<<uart)){
         Serial.begin(SERIAL_BAUD);
@@ -603,14 +603,6 @@ void setup()
         if (!bme.begin()) {
             const char errorString[] = "\"err\":\"BME Init\"";
             rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
-        }
-    }
-    
-    //Wenn die Node keinen Sleep hat teilen wir die dem Gateway mit einer 19 mit 
-    if (!(config[sleepTime])){
-        const char temp[] = {19};
-        if (SendAlowed) {
-            rfm69.sendWithRetry(config[gatewayId], temp, sizeof(temp));
         }
     }
         
@@ -1371,9 +1363,16 @@ void loop()
         SleepAlowed = true;
     }
 
-    if((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0) && SleepAlowed){
-        //Wir senden eine dec17 damit das Gateway diese Node beim Broker subscibed und wir retained Messages erhalten
-        const char temp[] = {17};
+    if(Startup || ((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0) && SleepAlowed)){
+        Startup = false;
+        // Wenn ein Sleep programmiert ist subscriben wir uns und das Gateway soll sich merken dass wir erreichbar sind -> 17
+        // Wenn ein Sleep programmiert ist subscriben wir uns -> 19
+        char temp[1];
+        if((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0)){
+            temp[0] = 17;
+        }else{
+            temp[0] = 19;
+        }
         if (SendAlowed) {
             rfm69.sendWithRetry(config[gatewayId], temp, sizeof(temp));
         }
@@ -1385,9 +1384,15 @@ void loop()
             }
             delay(1);
         }
-        const char temp2[] = {18};
+        // Wenn ein Sleep programmiert ist unsubscriben wir uns und das Gateway soll sich merken dass wir schlafen -> 18
+        // Wenn ein Sleep programmiert ist unsubscriben wir uns und das Gateway soll sich merken dass wir erreichbar sind  -> 20
+        if((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0)){
+            temp[0] = 18;
+        }else{
+            temp[0] = 20;
+        }
         if (SendAlowed) {
-            rfm69.sendWithRetry(config[gatewayId], temp2, sizeof(temp2));
+            rfm69.sendWithRetry(config[gatewayId], temp, sizeof(temp));
         }
         //Die Temperatur einstellen (die Funktion braucht etwas länger)
         set_Temperature(0,true);
