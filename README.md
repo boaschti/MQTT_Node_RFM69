@@ -1,9 +1,9 @@
 # RFM69 JSON (Battery)Multisensor
  
-This project is a multisensor node based on a Atmega328 and RFM69 radio. The Sensor is a ultraLowPower(20uA) device supplied from 1.8V to 3.6V.
+This project is a multisensor node based on a Atmega328 and RFM69 radio. The Sensor is a ultraLowPower(0.1uA) device supplied from 1.8V to 3.6V.
  
 You can connect the node with the [Gateway](https://github.com/boaschti/MQTT_WLan_RFM69_Gateway) via MQTT to your home automation.
-Just download .elf and flash it with avr studio. Fuses are: low_fuses=0xd2 high_fuses=0xd1 extended_fuses=0xfe
+Just download .hex and flash it with avr studio. Fuses are: low_fuses=0xd2 high_fuses=0xd1 extended_fuses=0xfe (extended_fuses=0xff = BrownOut off = UltraLowPower)
  
 ### Board
 The board has
@@ -22,7 +22,7 @@ The board you can order [here](https://www.itead.cc/) or other PCB Services. You
 - BME280 BMP280
 - DS18b20 (in future)
 - HC-SR05 (in future)
-- every switch (pir (hc-sr501), touch sensors (TTP224), reed kontakt, ect)
+- every switch (pir (hc-sr501), touch sensors (TTP223), reed kontakt, hall Sensor (DRV5032FADBZT) ect)
 - light sensor (LDR)
 - every analog Sernsor (rain sensor, plant sensor, ect)
 - S0 energy counter
