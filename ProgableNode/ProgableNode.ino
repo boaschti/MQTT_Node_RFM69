@@ -1165,7 +1165,9 @@ void go_sleep(void){
     PRR = 0;
     
     //Wir schalten den Watchdog ein. 8sec und Interrupt damit wir wieder aufwachen
-    wdt_set(WDTO_8S);
+    if ((config[sleepTime] == 255) && (config[sleepTimeMulti] == 255)){
+        wdt_set(WDTO_8S);
+    }
 
     for (uint16_t i = 0; i < (config[sleepTime] * config[sleepTimeMulti]); i++){
         //Wenn der Sensor versorgt werden soll und die Spannung erhöht werden soll
