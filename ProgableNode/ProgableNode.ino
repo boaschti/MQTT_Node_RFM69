@@ -1419,30 +1419,45 @@ void loop()
 
 ISR (PCINT0_vect)
 {
+    cli();
+    //debounce switch
+    delay(2);
+    sei();
     sleep_disable();        // first thing after waking from sleep:
     boolean oldSendAlowed = SendAlowed;
     SendAlowed = false;
     read_inputs();
+    InputAlredyRead = true;
     SendAlowed = oldSendAlowed;
     PCinterrupt = true;
 }
 
 ISR (PCINT1_vect)
 {
+    cli();
+    //debounce switch
+    delay(2);
+    sei();
     sleep_disable();        // first thing after waking from sleep:
     boolean oldSendAlowed = SendAlowed;
     SendAlowed = false;
     read_inputs();
+    InputAlredyRead = true;
     SendAlowed = oldSendAlowed;
     PCinterrupt = true;
 }
 
 ISR (PCINT2_vect)
 {
+    cli();
+    //debounce switch
+    delay(2);
+    sei();
     sleep_disable();        // first thing after waking from sleep:
     boolean oldSendAlowed = SendAlowed;
     SendAlowed = false;
     read_inputs();
+    InputAlredyRead = true;
     SendAlowed = oldSendAlowed;
     PCinterrupt = true;
 }
