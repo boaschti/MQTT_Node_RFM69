@@ -623,23 +623,25 @@ void setup()
     write_buffer_str("abc","123",false) -> Es wird ein String '"abc":"def"' in den Buffer geschrieben	
     write_buffer_str("","") -> Es werden alle Daten gesendet und der Pointer auf 0 gesetzt
     
+    Es wird am Anfang ein { und am Ende ein } gesetzt damit die Nachricht ein gueltiges json Format hat
     Es wird immer ueberprueft ob die maxixmale laenge von 61Bytes (begrenzt vom RFM Modul) ueberschritten wird 
     Es wird immer ueberprueft ob die neue Nachricht + messageOverhead noch Platz hat. Wenn nicht wird erst gesendet
     */
     
-    #define messageOverheadStr 6	//"":"",
-    #define messageOverheadDec 4	//"":,
+    #define lengthMessageOverheadStr 6    //"":"",
+    #define lengthMessageOverheadDec 4    //"":,
+    #define lengthMessageEndChar     1    //}
     
     static char sendBuffer[RF69_MAX_DATA_LEN + 1];
-    static uint8_t sendBufferPointer = 0;	
+    static uint8_t sendBufferPointer = 0;
     uint8_t nameLength = strnlen(name, RF69_MAX_DATA_LEN);
     uint8_t wertLength = strlen(wert);
     uint8_t messageOverhead;
     
     if (strWert == true){
-        messageOverhead = messageOverheadStr;
+        messageOverhead = lengthMessageOverheadStr;
     }else{
-        messageOverhead = messageOverheadDec;
+        messageOverhead = lengthMessageOverheadDec;
     }
     
     //Wir merken uns wann das Senden das letzte Mal schief ging und reseten ggf die Sperre
@@ -653,15 +655,16 @@ void setup()
     }
     
     //Es wird geprueft ob die Nachricht ueberhaupt in den Buffer passt ansonsten senden wir eine Fehlermeldung
-    if ((nameLength + wertLength + messageOverhead) <= RF69_MAX_DATA_LEN)
+    if ((nameLength + wertLength + messageOverhead + lengthMessageEndChar) <= RF69_MAX_DATA_LEN)
     {
         //Wir pruefen ob die Nachricht zusaetlich in den Buffer passt ansonsten schicken wir zuerst alle Daten weg
         //Wenn die wertLange 0 ist, und Daten, die noch nicht gesendet worden sind vorliegen, dann wollen wir diese senden 
-        if (SendAlowed&&(((nameLength + wertLength + sendBufferPointer + messageOverhead) > RF69_MAX_DATA_LEN) || ((wertLength == 0) && (sendBufferPointer > 0)))){
-            if (!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer)){
+        if (SendAlowed&&(((nameLength + wertLength + sendBufferPointer + messageOverhead + lengthMessageEndChar) > RF69_MAX_DATA_LEN) || ((wertLength == 0) && (sendBufferPointer > 0)))){
+            sendBuffer[sendBufferPointer] = '\}';
+            if (!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer + lengthMessageEndChar)){
                 //Wir konnten nicht senden-> wir warten und probieren es noch einmal
                 delay(config[nodeId]*1.3);
-                if (!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer)){
+                if (!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer + lengthMessageEndChar)){
                     //Ein Fehler ist aufgetreten wir merken uns den Bufferinhalt
                     radio_Rx_loop(); //RFM->RXMode
                     //Wir verbieten das Senden und merken uns den Zeitstempel damit diese Node nicht sofort wieder senden will und die Frequenz blokiert
@@ -675,11 +678,13 @@ void setup()
                 sendBufferPointer = 0;
             }
         }
-        if ((nameLength + wertLength + sendBufferPointer + messageOverhead) < RF69_MAX_DATA_LEN){
+        if ((nameLength + wertLength + sendBufferPointer + messageOverhead + lengthMessageEndChar) < RF69_MAX_DATA_LEN){
         // WIr wollen nur in den Puffer schreiben wenn auch ein Wert uebergeben wurde und der Buffer leer ist
             if (wertLength != 0){
                 if (sendBufferPointer > 0){
                     sendBuffer[sendBufferPointer++] = ',';
+                }else{
+                    sendBuffer[sendBufferPointer++] = '\{';
                 }
                 sendBuffer[sendBufferPointer++] = '\"';
 
@@ -702,7 +707,6 @@ void setup()
                 if (strWert == true){
                     sendBuffer[sendBufferPointer++] = '\"';
                 }
-                //sendBuffer[sendBufferPointer++] = ',';
                 sendBuffer[sendBufferPointer] = '\0';
             }
         }else{
