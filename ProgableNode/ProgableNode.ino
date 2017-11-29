@@ -101,6 +101,7 @@ U8X8_SSD1306_128X64_NONAME_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE);
 //Pins zum bedienen des Heiz Thermostat Stellrades
     #define signalA         0
     #define signalB         1    
+   
 
 //device ultrasonic
     #define HC05pingPin 	0
@@ -543,7 +544,14 @@ void setup()
     delay(10);
     //Init RFM69
 
-    rfm69.initialize(FREQUENCY, config[nodeId], config[networkId]);
+    if (!rfm69.initialize(FREQUENCY, config[nodeId], config[networkId])){
+        for (uint8_t i = 0; i<5; i++){
+        digitalWrite(LED_3, LOW);
+        delay(100);
+        digitalWrite(LED_3, HIGH);
+        delay(100);
+        }
+    }
 
     //rfm69.initialize(FREQUENCY,NODEID,NETWORKID);
     #ifdef IS_RFM69HW
@@ -581,17 +589,20 @@ void setup()
         u8x8.drawString(4,3,temp);       
     }
     
+    uint8_t printOK = 1;
+    
     if (!(eeprom_read_byte(&eeConfig[oscCalError]))){
         eeprom_write_byte(&eeConfig[oscCalError], 1);
         wdt_enable(WDTO_8S);
         if (!oscCalibration()) {
-            const char errorString[] = "\"err\":\"oscCal\"";
+            const char errorString[] = "\"state\":\"oscCal\"";
             rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
         }
         eeprom_write_byte(&eeConfig[oscCalError], 0);
         disableWd();
     }else{
-        const char errorString[] = "\"err\":\"oscCal_skiped\"";
+        printOK = 0;
+        const char errorString[] = "\"state\":\"oscCal_skiped\"";
         rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
     }
     
@@ -602,7 +613,8 @@ void setup()
     
     if (config[digitalSensors] & (1<<readBME)){
         if (!bme.begin()) {
-            const char errorString[] = "\"err\":\"BME Init\"";
+            printOK = 0;
+            const char errorString[] = "\"state\":\"error BME Init\"";
             rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
         }
     }
@@ -610,8 +622,10 @@ void setup()
     //reset oscal error damit der oscal beim nächten MAl wieder ausgeführt wird
     eeprom_write_byte(&eeConfig[oscCalError], 0);
 
-    const char errorString[] = "\"info\":\"setup_Node\"";
-    rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
+    if (printOK){
+        const char errorString[] = "\"state\":\"Ok\"";
+        rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
+    }
 
     digitalWrite(LED_3, LOW);
 }
@@ -634,6 +648,7 @@ void setup()
     
     static char sendBuffer[RF69_MAX_DATA_LEN + 1];
     static uint8_t sendBufferPointer = 0;
+    static uint32_t messageId = 0;
     uint8_t nameLength = strnlen(name, RF69_MAX_DATA_LEN);
     uint8_t wertLength = strlen(wert);
     uint8_t messageOverhead;
@@ -685,6 +700,18 @@ void setup()
                     sendBuffer[sendBufferPointer++] = ',';
                 }else{
                     sendBuffer[sendBufferPointer++] = '\{';
+                    const char idMessage[] = "\"id\":";
+                    char strmessageId[10];
+                    for (uint8_t loop = 0; idMessage[loop] != '\0'; loop++)
+                    {
+                        sendBuffer[sendBufferPointer++] = idMessage[loop];
+                    }
+                    itoa(++messageId, strmessageId, 10);
+                    for (uint8_t loop = 0; strmessageId[loop] != '\0'; loop++)
+                    {
+                        sendBuffer[sendBufferPointer++] = strmessageId[loop];
+                    }
+                    sendBuffer[sendBufferPointer++] = ',';
                 }
                 sendBuffer[sendBufferPointer++] = '\"';
 
@@ -879,7 +906,9 @@ boolean readMessage(char *message){
         }
         if (strcmp(parts[i] , "t") == 0){
             if (!(set_Temperature(atoi(parts[i +2])))){
-                write_buffer_str("err", "setTemp", true);
+                write_buffer_str("t_0", "Error", true);
+            }else{
+                write_buffer_str("t_0", "Ok", true);
             }
         }
         //den Watchdog nachtriggern
@@ -890,7 +919,7 @@ boolean readMessage(char *message){
         }
     }
     if (resetCPU){
-        write_buffer_str("info", "restart_Node", true);
+        write_buffer_str("state", "restart_Node", true);
         write_buffer_str("","");	
         wdt_enable(WDTO_15MS);
         while(1);
@@ -989,7 +1018,7 @@ void read_Dallas(void)
     }
 
     if (dallas.getDeviceCount() == 0){
-        write_buffer_str("err", "noDS");
+        write_buffer_str("state", "error no Dallas");
     }   
 }
 
@@ -1001,7 +1030,6 @@ void read_HC05(void){
 uint16_t read_Vcc(boolean sendWert = true){
     
     // Lese 1.1V reference gegen AVcc
-
     uint16_t result;   
     ADMUX = (1<<REFS0) | (1<<MUX3) | (1<<MUX2) | (1<<MUX1);
     delay(2);
@@ -1061,20 +1089,18 @@ void read_analog(void){
 
 boolean set_Temperature(uint8_t temperature, boolean setTemp = false){
 
-    digitalWrite(signalA, LOW);
-    digitalWrite(signalB, LOW);
     #define delayTimeA 5
     #define delayTimeB 20
     static uint8_t sollTemp = 0;
     static uint8_t istTemp = 0;
-    
 
-
-    //Error, Encoder steht falsch 
+    //Error, Encoder steht falsch
     if ((digitalRead(signalA) == LOW) || (digitalRead(signalB) == LOW)){
         return false;
     }
     if (setTemp){
+        digitalWrite(signalA, LOW);
+        digitalWrite(signalB, LOW);
         if (sollTemp != istTemp){
             //Wir stellen erst auf OFF
             for ( uint8_t i = 0; i < 60; i++){
@@ -1162,7 +1188,7 @@ void go_sleep(void){
     PRR = 0;
     
     //Wir schalten den Watchdog ein. 8sec und Interrupt damit wir wieder aufwachen
-    if ((config[sleepTime] == 255) && (config[sleepTimeMulti] == 255)){
+    if (!((config[sleepTime] == 255) && (config[sleepTimeMulti] == 255))){
         wdt_set(WDTO_8S);
     }
 
