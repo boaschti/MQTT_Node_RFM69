@@ -180,6 +180,8 @@ uint8_t eeEncryptKey[16+1] EEMEM;
 #define sensorPowerSleep    2       //die Sensor versorgung wird waehrend dem Sleep nicht abgeschaltet. Wenn pumpSensorVoltage gesetzt ist wird alle 8sec der Kondensator erneut aufgeladen.
 #define debugLed            3       //schaltet die Led Status anzeigen 
 #define displayAlwaysOn     4       //Das Display wird im sleep nicht abgeschaltet
+#define delOldData          5       //Die alten Daten die evtl nicht gesendet wurden werden in einem neuen Aufwachzyklus geloescht
+#define sendAgain           6       //Die alten Daten die evtl nicht gesendet wurden werden nach einem wd Zyklus (8s) erneut gesendet
 
 //Die folgenden Definitionen zeigen die Stelle im BYTE Array wo die Einstellungen gespeichert sind:
 //Man kann direkt auf das ARRAY per Funk zugreifen die Werte sind immer dezimal:
@@ -431,6 +433,7 @@ void initVariables(void)
     //Alle Pins auf Eingang
     //keine Sensoren aktiv
     //es kann bei der ersten Inbetriebnahme zu Problemen (haengt beim Sensor lesen) kommen wenn diese Variable nicht auf 255 steht
+    
     if ((eeprom_read_byte(&eeConfig[0]) == 255) || (eeprom_read_byte(&eeConfig[firstEEPromInit]) != 0xAF) || getJumper()){
     //if (1){
         for (uint8_t i = 0; i < configSizeAll - 5; i++){
@@ -631,7 +634,7 @@ void setup()
     digitalWrite(LedPinMapping[2], LOW);
 }
 
- boolean write_buffer_str(char *name, char *wert, boolean strWert = false )
+ boolean write_buffer_str(char *name, char *wert, boolean strWert = false, boolean deleteBuf = false )
 {
     /*
     write_buffer_str("abc","123") -> Es wird ein String '"abc":123' in den Buffer geschrieben
@@ -654,6 +657,10 @@ void setup()
     uint8_t wertLength = strlen(wert);
     uint8_t messageOverhead;
     
+    if (deleteBuf){
+        sendBufferPointer = 0;
+    }
+    
     if (strWert == true){
         messageOverhead = lengthMessageOverheadStr;
     }else{
@@ -675,24 +682,30 @@ void setup()
     {
         //Wir pruefen ob die Nachricht zusaetlich in den Buffer passt ansonsten schicken wir zuerst alle Daten weg
         //Wenn die wertLange 0 ist, und Daten, die noch nicht gesendet worden sind vorliegen, dann wollen wir diese senden 
-        if (SendAlowed&&(((nameLength + wertLength + sendBufferPointer + messageOverhead + lengthMessageEndChar) > RF69_MAX_DATA_LEN) || ((wertLength == 0) && (sendBufferPointer > 0)))){
-            sendBuffer[sendBufferPointer] = '\}';
-            if (!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer + lengthMessageEndChar)){
-                //Wir konnten nicht senden-> wir warten und probieren es noch einmal
-                delay(config[nodeId]*1.3);
+        if (SendAlowed){
+            if (((nameLength + wertLength + sendBufferPointer + messageOverhead + lengthMessageEndChar) > RF69_MAX_DATA_LEN) || ((wertLength == 0) && (sendBufferPointer > 0))){
+                sendBuffer[sendBufferPointer] = '\}';
                 if (!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer + lengthMessageEndChar)){
-                    //Ein Fehler ist aufgetreten wir merken uns den Bufferinhalt
-                    radio_Rx_loop(); //RFM->RXMode
-                    //Wir verbieten das Senden und merken uns den Zeitstempel damit diese Node nicht sofort wieder senden will und die Frequenz blokiert
-                    sendTimeOld = millis();
-                    SendAlowed = false;
-                    return false;
+                    //Wir konnten nicht senden-> wir warten und probieren es noch einmal
+                    delay(config[nodeId]*1.3);
+                    if (!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer + lengthMessageEndChar)){
+                        //Ein Fehler ist aufgetreten wir merken uns den Bufferinhalt
+                        //radio_Rx_loop(); //RFM->RXMode
+                        //Wir verbieten das Senden und merken uns den Zeitstempel damit diese Node nicht sofort wieder senden will und die Frequenz blokiert
+                        sendTimeOld = millis();
+                        SendAlowed = false;
+                        return false;
+                    }else{
+                        sendBufferPointer = 0;
+                    }
                 }else{
                     sendBufferPointer = 0;
                 }
-            }else{
-                sendBufferPointer = 0;
             }
+        // es gib den Fall dass die Funktion mit einer wertlenth == 0 aufgerufen wird in diesem Fall wollen wir nur senden 
+        // wenn dies aber nicht klappt (z.B.SendAlowed == 0) dann muessen wir false zurueck geben
+        }else if ((wertLength == 0) && (sendBufferPointer > 0)){
+            return false;
         }
         if ((nameLength + wertLength + sendBufferPointer + messageOverhead + lengthMessageEndChar) < RF69_MAX_DATA_LEN){
         // WIr wollen nur in den Puffer schreiben wenn auch ein Wert uebergeben wurde und der Buffer leer ist
@@ -744,11 +757,11 @@ void setup()
     }else{
         const char errorString[] = "\"err\":\"Message to long\"";
         rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
-        radio_Rx_loop(); //RFM->RXMode
+        //radio_Rx_loop(); //RFM->RXMode
         return false;
     }
     
-    radio_Rx_loop(); //RFM->RXMode
+    //radio_Rx_loop(); //RFM->RXMode
     return true;
 }
 
@@ -1159,7 +1172,7 @@ void pump_Sensor_Voltage(void){
     }
 
 }
-void go_sleep(void){
+void go_sleep(boolean shortSleep = false){
     
     BreakSleep = false;
     PCinterrupt = false;
@@ -1173,8 +1186,14 @@ void go_sleep(void){
     }
     
     rfm69.sleep();
+
     if (config[digitalSensors] & (1<<readBME)){
         bme.sleepMode();
+    }
+    
+    //Wir loeschen den Buffer damit keine alten Daten aufgehoben werden
+    if (config[nodeControll] & (1<<delOldData)){
+        write_buffer_str("","",false,true);
     }
     
     //Wenn ein Display verbaut ist und sensorPowerSleep nicht gesetzt ist
@@ -1183,7 +1202,7 @@ void go_sleep(void){
             u8x8.setPowerSave(1);
         }
     }
-
+    
     //todo BME sleep
     uint8_t oldADMUX = ADMUX;
     ADMUX = 0;
@@ -1196,8 +1215,15 @@ void go_sleep(void){
     if (!((config[sleepTime] == 255) && (config[sleepTimeMulti] == 255))){
         wdt_set(WDTO_8S);
     }
-
-    for (uint16_t i = 0; i < (config[sleepTime] * config[sleepTimeMulti]); i++){
+    
+    uint16_t iInit = 0; 
+    
+    if (shortSleep == true){
+        iInit = config[sleepTime] * config[sleepTimeMulti];
+        iInit--;
+    }
+    
+    for (uint16_t i = iInit; i < (config[sleepTime] * config[sleepTimeMulti]); i++){
         //Wenn der Sensor versorgt werden soll und die Spannung erhöht werden soll
         if ((config[nodeControll] & (1<<pumpSensorVoltage)) && (config[nodeControll] & (1<<sensorPowerSleep))){
             digitalWrite(supplyPin, HIGH);
@@ -1439,10 +1465,20 @@ void loop()
             write_buffer_str("","");
             if (config[nodeControll] & (1<<debugLed)){
                 digitalWrite(LED_3, LOW);
+            // Wenn das configBit sendAgain gesetzt ist wollen wir nach einer wdPeriode wieder aufwachen und erneut senden
+            if (config[nodeControll] & (1<<sendAgain)){
+                boolean sendAgainOk;
+                sendAgainOk = write_buffer_str("","");
+                go_sleep(!sendAgainOk);
+                sensorenLesen = sendAgainOk;
+                wdSenden = sendAgainOk;
+            }else{
+                //Zum leeren des Buffers und senden aller Daten vor dem Sleep
+                write_buffer_str("","");
+                go_sleep();
+                sensorenLesen = true;	//Wir wollen, dass die Sensoren sofort gelesen werden
+                wdSenden = true;		//Wir wollen, dass der Watchdog sofort gesendet wird
             }
-            go_sleep();
-            sensorenLesen = true;	//Wir wollen, dass die Sensoren sofort gelesen werden
-            wdSenden = true;		//Wir wollen, dass der Watchdog sofort gesendet wird
         }
     }
 
