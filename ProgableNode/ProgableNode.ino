@@ -1364,7 +1364,7 @@ void loop()
     static boolean wdSenden = false;
     
     if (config[nodeControll] & (1<<debugLed)){
-        digitalWrite(LED_3, LOW);
+        digitalWrite(LedPinMapping[2], LOW);
     }
     
     if (config[nodeControll] & (1<<pumpSensorVoltage)){
@@ -1464,7 +1464,8 @@ void loop()
             //Zum leeren des Buffers und senden aller Daten vor den Sleep
             write_buffer_str("","");
             if (config[nodeControll] & (1<<debugLed)){
-                digitalWrite(LED_3, LOW);
+                digitalWrite(LedPinMapping[2], LOW);
+            }
             // Wenn das configBit sendAgain gesetzt ist wollen wir nach einer wdPeriode wieder aufwachen und erneut senden
             if (config[nodeControll] & (1<<sendAgain)){
                 boolean sendAgainOk;
@@ -1485,7 +1486,7 @@ void loop()
     //Zum leeren des Buffers und senden aller Daten
     //write_buffer_str("","");
     if (config[nodeControll] & (1<<debugLed)){
-        digitalWrite(LED_3, HIGH);
+        digitalWrite(LedPinMapping[2], HIGH);
     }
     
 }//end loop
