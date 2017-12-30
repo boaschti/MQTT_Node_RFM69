@@ -1421,7 +1421,6 @@ void loop()
 
     timepassed = millis() - WdTrigTimeStamp;
     if (timepassed > WdPinTimeout){
-        //WdTrigTimeStamp = millis();
         reset_wdPins();
         SleepAlowed = true;
     }
@@ -1429,7 +1428,7 @@ void loop()
     if(Startup || ((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0) && SleepAlowed)){
         Startup = false;
         // Wenn ein Sleep programmiert ist subscriben wir uns und das Gateway soll sich merken dass wir erreichbar sind -> 17
-        // Wenn ein Sleep programmiert ist subscriben wir uns -> 19
+        // Wenn kein Sleep programmiert ist subscriben wir uns -> 19
         char temp[1];
         if((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0)){
             temp[0] = 17;
@@ -1448,7 +1447,7 @@ void loop()
             delay(1);
         }
         // Wenn ein Sleep programmiert ist unsubscriben wir uns und das Gateway soll sich merken dass wir schlafen -> 18
-        // Wenn ein Sleep programmiert ist unsubscriben wir uns und das Gateway soll sich merken dass wir erreichbar sind  -> 20
+        // Wenn kein Sleep programmiert ist unsubscriben wir uns und das Gateway soll sich merken dass wir erreichbar sind  -> 20
         if((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0)){
             temp[0] = 18;
         }else{
@@ -1461,8 +1460,6 @@ void loop()
         set_Temperature(0,true);
         //Wenn der Watchdog im letzten Schritt nicht getriggert wurde dann rufen wir den Sleep auf
         if (SleepAlowed){
-            //Zum leeren des Buffers und senden aller Daten vor den Sleep
-            write_buffer_str("","");
             if (config[nodeControll] & (1<<debugLed)){
                 digitalWrite(LedPinMapping[2], LOW);
             }
@@ -1481,6 +1478,10 @@ void loop()
                 wdSenden = true;		//Wir wollen, dass der Watchdog sofort gesendet wird
             }
         }
+    }
+
+    if((config[sleepTime] == 0) || (config[sleepTimeMulti] == 0)){
+        radio_Rx_loop();
     }
 
     //Zum leeren des Buffers und senden aller Daten
