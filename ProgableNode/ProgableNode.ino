@@ -52,9 +52,7 @@ Modifications Needed:
 //#define FREQUENCY     RF69_915MHZ
 //#define IS_RFM69HW    //uncomment only for RFM69HW!
 #define ACK_TIME		30 // Wartezeit auf einen ACK
-#define LED_1			5  
-#define LED_2			6 
-#define LED_3			7 
+
 #define ResetRfmPin		2
 #define rxPollTime		450 // Zeit in ms (ca) die auf eine Message gewartet wird bevor der Node in den Sleep geht
 
@@ -228,6 +226,9 @@ const uint8_t pinMapping[15]{1,0,19,18,9,16,17,0,0,0,2,3,4,5,0};
 //der SSPin macht noch Probleme Spi funktioniert dann nicht mehr!
 //const uint8_t pinMapping[15]{0,1,17,18,19,9,10,0,0,0,3,4,5,0,0};
 unsigned long counter[usedDio];
+const uint8_t LedPinMapping[3]{5,6,7};
+
+// Typische Led Farben: 0:Gruen 1:Gelb/Org 2:Rot
 
 #define bit_set(p,m) ((p) |= (1<<m))
 #define bit_clear(p,m) ((p) &= ~(1<<m))
@@ -506,9 +507,9 @@ void setupPins(void)
 
 void setupDefaultPins(void){
     // Onboard LEDs
-    pinMode(LED_1, OUTPUT);
-    pinMode(LED_2, OUTPUT);
-    pinMode(LED_3, OUTPUT);
+    pinMode(LedPinMapping[0], OUTPUT);
+    pinMode(LedPinMapping[1], OUTPUT);
+    pinMode(LedPinMapping[2], OUTPUT);
     
     //reset Pin Rfm
     pinMode(ResetRfmPin, OUTPUT);
@@ -534,7 +535,7 @@ void setup()
     setupDefaultPins();
     //reset_wdPins(); 
     
-    digitalWrite(LED_3, HIGH);
+    digitalWrite(LedPinMapping[2], HIGH);
 
     //RFM69-------------------------------------------
     //Reset
@@ -546,10 +547,10 @@ void setup()
 
     if (!rfm69.initialize(FREQUENCY, config[nodeId], config[networkId])){
         for (uint8_t i = 0; i<5; i++){
-        digitalWrite(LED_3, LOW);
-        delay(100);
-        digitalWrite(LED_3, HIGH);
-        delay(100);
+            digitalWrite(LedPinMapping[2], LOW);
+            delay(100);
+            digitalWrite(LedPinMapping[2], HIGH);
+            delay(100);
         }
     }
 
@@ -627,7 +628,7 @@ void setup()
         rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
     }
 
-    digitalWrite(LED_3, LOW);
+    digitalWrite(LedPinMapping[2], LOW);
 }
 
  boolean write_buffer_str(char *name, char *wert, boolean strWert = false )
@@ -885,10 +886,14 @@ boolean readMessage(char *message){
         }
         if (strcmp(parts[i] , "led") == 0){
             if (strcmp(parts[i+2] , "blink") == 0){
-                digitalWrite(LED_3, HIGH);
+                digitalWrite(LedPinMapping[atoi(parts[i + 1])], HIGH);
                 delay(100);
-                digitalWrite(LED_3, LOW);
-            }                
+                digitalWrite(LedPinMapping[atoi(parts[i + 1])], LOW);
+            }else if(strcmp(parts[i+2] , "1") == 0){
+                digitalWrite(LedPinMapping[atoi(parts[i + 1])], HIGH);
+            }else{
+                digitalWrite(LedPinMapping[atoi(parts[i + 1])], LOW);
+            }
         }
         if (strcmp(parts[i] , "key") == 0){
             eeprom_write_block(parts[i+2],  &eeEncryptKey, 16+1);
@@ -935,7 +940,7 @@ boolean radio_Rx_loop(void) {
         uint8_t data[RF69_MAX_DATA_LEN];
         uint8_t dataLen;
         if (config[nodeControll] & (1<<debugLed)){
-            digitalWrite(LED_1, HIGH);
+            digitalWrite(LedPinMapping[0], HIGH);
         }
         
         //speichern der Daten, da evt schon wieder welche ankommen
@@ -960,7 +965,7 @@ boolean radio_Rx_loop(void) {
             //rfm69.initialize(FREQUENCY, config[nodeId], config[networkId]);
         }
         if (config[nodeControll] & (1<<debugLed)){
-            digitalWrite(LED_1, LOW);
+            digitalWrite(LedPinMapping[0], LOW);
         }
         return true;
     }else{
@@ -1160,7 +1165,7 @@ void go_sleep(void){
     PCinterrupt = false;
     
     if (config[nodeControll] & (1<<debugLed)){
-        digitalWrite(LED_2, LOW);
+        digitalWrite(LedPinMapping[1], LOW);
     }
     
     if (!(config[nodeControll] & (1<<sensorPowerSleep))){
@@ -1221,11 +1226,11 @@ void go_sleep(void){
     ADMUX = oldADMUX;
     ADCSRA = oldADCSRA;
     SendAlowed = true;
-
+    
     if (config[digitalSensors] & (1<<readBME)){
         bme.normalMode();
     }
-    
+
     //Wenn der Sensor während des Sleeps nicht versorgt wurde schalten wir ihn hier wieder ein
     if (config[nodeControll] & (1<<sensorPower)){
         digitalWrite(supplyPin, HIGH);
@@ -1236,7 +1241,7 @@ void go_sleep(void){
         u8x8.setPowerSave(0);
     }
     if (config[nodeControll] & (1<<debugLed)){
-        digitalWrite(LED_2, HIGH);
+        digitalWrite(LedPinMapping[1], HIGH);
     }
 }
 
