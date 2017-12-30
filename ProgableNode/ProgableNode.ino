@@ -118,6 +118,8 @@ boolean PCinterrupt = false;
 boolean InputAlredyRead = false;
 boolean SendAlowed = true;
 boolean Startup = true;
+boolean ThermostatPresent = false;
+
 
 //end Board Defines ---------------------------------------------------------------------------------------------------
 
@@ -164,9 +166,9 @@ uint8_t eeEncryptKey[16+1] EEMEM;
 
 //Zum kofigurieren von digitalen Aktoren muss man nur angeben welche Aktoren verbaut sind.
 //Bits der Variable digitalOut
-#define free            0           
+#define lockThermostate 0           //Lock the encoder of a thermostate
 #define uart            1
-#define dmx             2           //Wenn ein DMX Signal ausgegeben werden soll
+#define free2           2           
 #define ssd1306_64x48   3           //WEMOS Schield mit ssd1306 und 64x48 Pixel, SCL:D1 SDA:D2 VDD:3V3 GND:GND
 #define ssd1306_128x64  4           //Display Board mit ssd1306 und 128x64 Pixel, Board mit 7 Pins: R1,R4,R6,R7:4,7k R8:0 SCL:D0 SDA:D1 VDD:3V3 GND:GND,DC RES*
 //     100nF 10k
@@ -923,6 +925,7 @@ boolean readMessage(char *message){
             i += 2;
         }
         if (strcmp(parts[i] , "t") == 0){
+            ThermostatPresent = true;
             if (!(set_Temperature(atoi(parts[i +2])))){
                 write_buffer_str("t_0", "Error", true);
             }else{
@@ -1111,15 +1114,24 @@ boolean set_Temperature(uint8_t temperature, boolean setTemp = false){
     #define delayTimeB 20
     static uint8_t sollTemp = 0;
     static uint8_t istTemp = 0;
-
-    //Error, Encoder steht falsch
-    if ((digitalRead(signalA) == LOW) || (digitalRead(signalB) == LOW)){
-        return false;
-    }
+    boolean retVal;
+    
     if (setTemp){
-        digitalWrite(signalA, LOW);
-        digitalWrite(signalB, LOW);
         if (sollTemp != istTemp){
+            pciDisable(signalA);
+            pciDisable(signalB);
+            digitalWrite(signalA, LOW);
+            digitalWrite(signalB, LOW);
+            // Wir schalten die encoder sperre aus
+            if (config[digitalOut] & (1<<lockThermostate)){
+                pinMode(signalB, INPUT);
+            }
+            delay(5);
+            if ((digitalRead(signalA) == LOW) || (digitalRead(signalB) == LOW)){
+                return false;
+            }else{
+                retVal = true;
+            }            
             //Wir stellen erst auf OFF
             for ( uint8_t i = 0; i < 60; i++){
                 pinMode(signalA, OUTPUT);
@@ -1158,8 +1170,28 @@ boolean set_Temperature(uint8_t temperature, boolean setTemp = false){
         }else{
             sollTemp = 0;
         }
+        if (config[digitalOut] & (1<<lockThermostate)){
+            pinMode(signalB, INPUT);
+        }
+        delay(5);
+        //Error, Encoder steht falsch
+        if ((digitalRead(signalA) == LOW) || (digitalRead(signalB) == LOW)){
+            retVal = false;
+        }else{
+            retVal = true;
+        }
     }
-    return true;
+
+    if (config[digitalOut] & (1<<lockThermostate)){
+            pinMode(signalB, OUTPUT);
+    }
+
+    if (ThermostatPresent){
+        pciSetup(signalA);
+        pciSetup(signalB);
+    }
+    
+    return retVal;
 }
 
 void pump_Sensor_Voltage(void){
@@ -1282,8 +1314,8 @@ boolean read_inputs(boolean readAll = false){
         boolean inputState;
         inputState = digitalRead(pinMapping[i]) == HIGH;
         //wenn beide Interrupts und der Input nicht gezählt werden soll, dann wachen wir auch auf. Fuer eine eventuelle Wakup Taste damit das Display was anzeigt
-        if ((config[i] & (1<<intFall)) && (config[i] & (1<<intRise)) && (!config[i] & (1<<count))) {
-            //BreakSleep = true;
+        if ((config[i] & (1<<intFall)) && (config[i] & (1<<intRise)) && (!(config[i] & (1<<count)))) {
+            BreakSleep = true;
         }
         if ((inputState != ((lastPinState & (1 << i)) != 0)) || readAllInputs){
             if (config[i] & (1<<readInput)){
@@ -1301,23 +1333,29 @@ boolean read_inputs(boolean readAll = false){
             }else{
                 bit_write(lastPinState, i, inputState);
             }
-            //setzen oder reseten der Pin change interrupts
             
-            if (inputState){
-                if (config[i] & (1<<intFall)){
-                    pciSetup(pinMapping[i]);
+            //WEnn das Thermostat angeschlossen ist und die Pins im Pinmapping sind dann wollen wir diese Pins nicht umconfigurieren
+            if (!(ThermostatPresent && ((pinMapping[i] != signalA) || (pinMapping[i] != signalB)))){
+                //setzen oder reseten der Pin change interrupts
+                if (inputState){
+                    if (config[i] & (1<<intFall)){
+                        pciSetup(pinMapping[i]);
+                    }else{
+                        pciDisable(pinMapping[i]);
+                    }
+                    if (config[i] & (1<<count)){
+                        counter[i]++;
+                    }
                 }else{
-                    pciDisable(pinMapping[i]);
-                }
-                if (config[i] & (1<<count)){
-                    counter[i]++;
+                    if (config[i] & (1<<intRise)){
+                        pciSetup(pinMapping[i]);
+                    }else{
+                        pciDisable(pinMapping[i]);
+                    }
                 }
             }else{
-                if (config[i] & (1<<intRise)){
-                    pciSetup(pinMapping[i]);
-                }else{
-                    pciDisable(pinMapping[i]);
-                }
+                //wenn es sich um einen Interrupt vom Thermostat handel wollen wir aufwachen
+                BreakSleep = true;
             }
         }
     }	
@@ -1427,6 +1465,8 @@ void loop()
 
     if(Startup || ((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0) && SleepAlowed)){
         Startup = false;
+        static boolean led3Shown = false;
+        
         // Wenn ein Sleep programmiert ist subscriben wir uns und das Gateway soll sich merken dass wir erreichbar sind -> 17
         // Wenn kein Sleep programmiert ist subscriben wir uns -> 19
         char temp[1];
@@ -1456,6 +1496,25 @@ void loop()
         if (SendAlowed) {
             rfm69.sendWithRetry(config[gatewayId], temp, sizeof(temp));
         }
+        //Wenn das Thermostate angeschlossen ist und der Encoder falsch steht dann zeigen wir das mit Led3 an dazu muss evtl die Sperre ausgeschaltet werden
+        if (config[digitalOut] & (1<<lockThermostate)){
+            pinMode(signalB, INPUT);
+        }        
+        delay(5);
+        if (ThermostatPresent && (digitalRead(signalA) == LOW || digitalRead(signalB) == LOW)){
+            digitalWrite(LedPinMapping[2], HIGH);
+            delay(60);
+            digitalWrite(LedPinMapping[2], LOW);
+            led3Shown = true;
+        }else if (led3Shown){
+            led3Shown = false;
+            digitalWrite(LedPinMapping[0], HIGH);
+            delay(60);
+            digitalWrite(LedPinMapping[0], LOW);            
+        }
+        if (config[digitalOut] & (1<<lockThermostate)){
+            pinMode(signalB, OUTPUT);
+        }        
         //Die Temperatur einstellen (die Funktion braucht etwas länger)
         set_Temperature(0,true);
         //Wenn der Watchdog im letzten Schritt nicht getriggert wurde dann rufen wir den Sleep auf
