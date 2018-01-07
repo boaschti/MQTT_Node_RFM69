@@ -116,9 +116,12 @@ volatile boolean SleepAlowed;
 boolean BreakSleep = false;
 boolean PCinterrupt = false;
 boolean InputAlredyRead = false;
+
 boolean SendAlowed = true;
 boolean Startup = true;
+
 boolean ThermostatPresent = false;
+boolean ShowLeds = false;
 
 
 //end Board Defines ---------------------------------------------------------------------------------------------------
@@ -854,14 +857,19 @@ boolean readMessage(char *message){
         //zum schreiben einer festen config
         if (strcmp(parts[i] , "w") == 0){
             if (atoi(parts[i + 1]) < configSize){
-                eeprom_write_byte(&eeConfig[atoi(parts[i + 1])], atoi(parts[i + 2]));
-                config[atoi(parts[i + 1])] = eeprom_read_byte(&eeConfig[atoi(parts[i + 1])]);
+                uint8_t regNr;
+                regNr = atoi(parts[i + 1]);
+                eeprom_write_byte(&eeConfig[regNr], atoi(parts[i + 2]));
+                //Daten in das Abbild uebernehemn
+                config[regNr] = eeprom_read_byte(&eeConfig[regNr]);
                 char temp[10] = "w_";
-                strncat(temp, parts[i+1],2);
-                sendInt(temp, config[atoi(parts[i + 1])]);
+                strncat(temp, regNr, 2);
+                sendInt(temp, config[regNr]);
                 i += 2;
-                //Wir wollen in einem sauberen Zustand starten
-                resetCPU = true;
+                //Wir wollen in einem sauberen Zustand starten manche Werte koennen ohne Neustart uebernommen werden
+                if (!((regNr == 20) || (regNr == 21) || (regNr == 22) || (regNr == 23) || (regNr == 24))){
+                    resetCPU = true;
+                }
             }
         }
         //zum lesen der Config
@@ -940,6 +948,12 @@ boolean readMessage(char *message){
         }
     }
     if (resetCPU){
+        // Wenn ein Sleep programmiert ist unsubscriben wir uns und das Gateway soll sich merken dass wir schlafen -> 18
+        char temp[1];
+        temp[0] = 18;
+        if (SendAlowed) {
+            rfm69.sendWithRetry(config[gatewayId], temp, sizeof(temp));
+        }
         write_buffer_str("state", "restart_Node", true);
         write_buffer_str("","");	
         wdt_enable(WDTO_15MS);
