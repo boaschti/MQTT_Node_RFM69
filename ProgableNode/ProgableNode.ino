@@ -1370,6 +1370,10 @@ boolean read_inputs(boolean readAll = false){
             }else{
                 //wenn es sich um einen Interrupt vom Thermostat handel wollen wir aufwachen
                 BreakSleep = true;
+                if (!readAllInputs){
+                    ShowLeds = true;
+                }
+                bit_write(lastPinState, i, inputState);
             }
         }
     }	
@@ -1479,7 +1483,6 @@ void loop()
 
     if(Startup || ((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0) && SleepAlowed)){
         Startup = false;
-        static boolean led3Shown = false;
         
         // Wenn ein Sleep programmiert ist subscriben wir uns und das Gateway soll sich merken dass wir erreichbar sind -> 17
         // Wenn kein Sleep programmiert ist subscriben wir uns -> 19
@@ -1514,17 +1517,20 @@ void loop()
         if (config[digitalOut] & (1<<lockThermostate)){
             pinMode(signalB, INPUT);
         }        
-        delay(5);
-        if (ThermostatPresent && (digitalRead(signalA) == LOW || digitalRead(signalB) == LOW)){
-            digitalWrite(LedPinMapping[2], HIGH);
-            delay(60);
-            digitalWrite(LedPinMapping[2], LOW);
-            led3Shown = true;
-        }else if (led3Shown){
-            led3Shown = false;
-            digitalWrite(LedPinMapping[0], HIGH);
-            delay(60);
-            digitalWrite(LedPinMapping[0], LOW);            
+        if (ShowLeds && ThermostatPresent){
+            delay(10);
+            ShowLeds = false;
+            if (digitalRead(signalA) == LOW || digitalRead(signalB) == LOW){
+                // Wir schalten die rote Led ein
+                digitalWrite(LedPinMapping[0], HIGH);
+                delay(30);
+                digitalWrite(LedPinMapping[0], LOW);
+            }else{
+                // Wir schalten die gruene Led ein
+                digitalWrite(LedPinMapping[2], HIGH);
+                delay(30);
+                digitalWrite(LedPinMapping[2], LOW);            
+            }
         }
         if (config[digitalOut] & (1<<lockThermostate)){
             pinMode(signalB, OUTPUT);
