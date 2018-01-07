@@ -525,8 +525,6 @@ void setupDefaultPins(void){
 
 void disableWd(void){
     //Reset WD Timer
-
-    
     MCUSR &= ~(1<<WDRF);
     WDTCSR |= (1<<WDCE) | (1<<WDE);
     WDTCSR = 0;
@@ -863,7 +861,7 @@ boolean readMessage(char *message){
                 //Daten in das Abbild uebernehemn
                 config[regNr] = eeprom_read_byte(&eeConfig[regNr]);
                 char temp[10] = "w_";
-                strncat(temp, regNr, 2);
+                strncat(temp, parts[i+1],2);
                 sendInt(temp, config[regNr]);
                 i += 2;
                 //Wir wollen in einem sauberen Zustand starten manche Werte koennen ohne Neustart uebernommen werden
