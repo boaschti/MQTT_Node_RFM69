@@ -113,15 +113,14 @@ unsigned long SensorPeriod;
 volatile unsigned long WdTrigTimeStamp;
 unsigned long WdPinTimeout;
 volatile boolean SleepAlowed;
-boolean BreakSleep = false;
-boolean PCinterrupt = false;
-boolean InputAlredyRead = false;
+volatile boolean BreakSleep = false;
+volatile boolean PCinterrupt = false;
+volatile boolean InputAlredyRead = false;
 
-boolean SendAlowed = true;
-boolean Startup = true;
+volatile boolean SendAlowed = true;
 
-boolean ThermostatPresent = false;
-boolean ShowLeds = false;
+volatile boolean ThermostatPresent = false;
+volatile boolean ShowLeds = false;
 
 
 //end Board Defines ---------------------------------------------------------------------------------------------------
@@ -132,7 +131,7 @@ boolean ShowLeds = false;
 #define configSizeAll configSize + configSizeInternal
 
 uint8_t eeConfig[configSizeAll] EEMEM;
-uint8_t config[configSizeAll];
+volatile uint8_t config[configSizeAll];
 uint8_t eeEncryptKey[16+1] EEMEM;
 
 
@@ -258,6 +257,7 @@ _BV(WDIE) | (value & 0x07)) ) \
 )
 
 boolean set_Temperature(uint8_t temperature, boolean setTemp = false);
+boolean get_saved_Massages(boolean startup = false);
 
 void pciSetup(byte pin)
 {
@@ -1223,9 +1223,63 @@ void pump_Sensor_Voltage(void){
     }
 
 }
-void go_sleep(boolean shortSleep = false){
+
+boolean get_saved_Massages(boolean getBackupMsg = false){
+
+    /*
+      Following commands controlls the gateway to get old msg for backuptopic or normal topic. The gateway also remembers if node is reachable.
+      17: subscribe on NodeTopic / Node reachable
+      18: unsubscribe both topics / Node NOT reachable
+      19: subsrcibe on BackupTopic / Node reachable
+      20: unsubscribe both topics / Node reachable
+    */
     
-    BreakSleep = false;
+    if (!SendAlowed){
+        return false;
+    }
+    
+    uint8_t wiederholung = 1;
+    
+    if (getBackupMsg){
+        wiederholung = 2;
+    }
+    
+    for (uint8_t i = 0; i < wiederholung; i++){
+        char temp[1];
+        if(getBackupMsg){
+            temp[0] = 19;
+        }else{
+            temp[0] = 17;
+        }
+        
+        if (SendAlowed) {
+            rfm69.sendWithRetry(config[gatewayId], temp, sizeof(temp));
+        }
+        //Wir pruefen bis der Timeout abgelaufen ist ob noch eine Nachricht kommt
+        for (uint16_t i = 0; i <= rxPollTime; i++){
+            //reset i damit wartezeit von vorne begonnen wird
+            if (radio_Rx_loop()){
+                i = 0;
+            }
+            delay(1);
+        }
+
+        if(getBackupMsg){
+            temp[0] = 20;
+        }else{
+            temp[0] = 18;
+        }
+        if (SendAlowed) {
+            rfm69.sendWithRetry(config[gatewayId], temp, sizeof(temp));
+        }
+        
+        getBackupMsg = false;
+    }
+    
+    return true;
+}
+
+void go_sleep(boolean shortSleep = false){
     PCinterrupt = false;
     
     if (config[nodeControll] & (1<<debugLed)){
@@ -1423,6 +1477,7 @@ void loop()
     static long pumpTimeOld;
     static boolean sensorenLesen = true;
     static boolean wdSenden = false;
+    static boolean gotoldmsg = false;
     
     if (config[nodeControll] & (1<<debugLed)){
         digitalWrite(LedPinMapping[2], LOW);
@@ -1486,38 +1541,16 @@ void loop()
         SleepAlowed = true;
     }
 
-    if(Startup || ((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0) && SleepAlowed)){
-        Startup = false;
+    if (!gotoldmsg){
+        //WIr holen uns die gespeicherten Nachrichten ab
+        gotoldmsg = get_saved_Massages(true);
+    }
+    
+    if((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0) && SleepAlowed){
         
-        // Wenn ein Sleep programmiert ist subscriben wir uns und das Gateway soll sich merken dass wir erreichbar sind -> 17
-        // Wenn kein Sleep programmiert ist subscriben wir uns -> 19
-        char temp[1];
-        if((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0)){
-            temp[0] = 17;
-        }else{
-            temp[0] = 19;
-        }
-        if (SendAlowed) {
-            rfm69.sendWithRetry(config[gatewayId], temp, sizeof(temp));
-        }
-        //Wir pruefen bis der Timeout abgelaufen ist ob noch eine Nachricht kommt
-        for (uint16_t i = 0; i <= rxPollTime; i++){
-            //reset i damit wartezeit von vorne begonnen wird
-            if (radio_Rx_loop()){
-                i = 0;
-            }
-            delay(1);
-        }
-        // Wenn ein Sleep programmiert ist unsubscriben wir uns und das Gateway soll sich merken dass wir schlafen -> 18
-        // Wenn kein Sleep programmiert ist unsubscriben wir uns und das Gateway soll sich merken dass wir erreichbar sind  -> 20
-        if((config[sleepTime] > 0) && (config[sleepTimeMulti] > 0)){
-            temp[0] = 18;
-        }else{
-            temp[0] = 20;
-        }
-        if (SendAlowed) {
-            rfm69.sendWithRetry(config[gatewayId], temp, sizeof(temp));
-        }
+        // WIr holen uns die gespeicherten Nachrichten vom Gateway (Server) ab
+        get_saved_Massages();
+        
         //Wenn das Thermostate angeschlossen ist und der Encoder falsch steht dann zeigen wir das mit Led3 an dazu muss evtl die Sperre ausgeschaltet werden
         if (config[digitalOut] & (1<<lockThermostate)){
             pinMode(signalB, INPUT);
