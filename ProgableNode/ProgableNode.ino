@@ -775,12 +775,14 @@ void setup()
     return true;
 }
 
-void sendInt(char *name, uint8_t wert){
+void sendInt(char *name, uint8_t wert, boolean sendImmidiatelly = true){
     
     char temp[5];
     itoa(wert, temp, 10);
     write_buffer_str(name, &temp[0]);
-    write_buffer_str("",""); //sende Daten
+    if (sendImmidiatelly){
+        write_buffer_str("",""); //sende Daten
+    }
 }
 
 boolean readMessage(char *message){
