@@ -473,6 +473,11 @@ void initVariables(void)
         SleepAlowed = true;
     }
     
+    // Wenn die node neu ist wird sie vom Gateway nicht empfangen
+    if ((config[networkId] == DEFAULTNETWORKID) && (config[nodeId] == DEFAULTNODEID)){
+        SendAlowed = false;
+    }
+    
 }
 
 void check_improveConfig(void){
@@ -601,13 +606,13 @@ void setup()
     if (!(eeprom_read_byte(&eeConfig[oscCalError]))){
         eeprom_write_byte(&eeConfig[oscCalError], 1);
         wdt_enable(WDTO_8S);
-        if (!oscCalibration()) {
+        if (!oscCalibration() && SendAlowed) {
             const char errorString[] = "\"state\":\"oscCal\"";
             rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
         }
         eeprom_write_byte(&eeConfig[oscCalError], 0);
         disableWd();
-    }else{
+    }else if (SendAlowed){
         printOK = 0;
         const char errorString[] = "\"state\":\"oscCal_skiped\"";
         rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
@@ -619,7 +624,7 @@ void setup()
     }
     
     if (config[digitalSensors] & (1<<readBME)){
-        if (!bme.begin()) {
+        if (!bme.begin() && SendAlowed) {
             printOK = 0;
             const char errorString[] = "\"state\":\"error BME Init\"";
             rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
@@ -629,7 +634,7 @@ void setup()
     //reset oscal error damit der oscal beim nächten MAl wieder ausgeführt wird
     eeprom_write_byte(&eeConfig[oscCalError], 0);
 
-    if (printOK){
+    if (printOK && SendAlowed){
         const char errorString[] = "\"state\":\"Ok\"";
         rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
     }
@@ -707,7 +712,7 @@ void setup()
             }
         // es gib den Fall dass die Funktion mit einer wertlenth == 0 aufgerufen wird in diesem Fall wollen wir nur senden 
         // wenn dies aber nicht klappt (z.B.SendAlowed == 0) dann muessen wir false zurueck geben
-        }else if ((wertLength == 0) && (sendBufferPointer > 0)){
+        }else if ((wertLength == 0) && (sendBufferPointer > 0) &! SendAlowed){
             return false;
         }
         if ((nameLength + wertLength + sendBufferPointer + messageOverhead + lengthMessageEndChar) < RF69_MAX_DATA_LEN){
@@ -759,7 +764,9 @@ void setup()
         }
     }else{
         const char errorString[] = "\"err\":\"Message to long\"";
-        rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
+        if (SendAlowed){
+            rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
+        }
         //radio_Rx_loop(); //RFM->RXMode
         return false;
     }
