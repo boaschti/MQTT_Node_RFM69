@@ -1,0 +1,6 @@
+*.FCStd1
+*.xml
+*.vsarduino.h
+*.cppproj
+*.atsuo
+*with_bootloader*
