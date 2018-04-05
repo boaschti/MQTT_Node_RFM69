@@ -1266,7 +1266,8 @@ boolean get_saved_Massages(boolean getBackupMsg = false){
             delay(1);
         }
 
-        if(getBackupMsg){
+        // Wir wollen erreichbar sein wenn wir nicht schlafen
+        if(getBackupMsg || !(config[sleepTime] || config[sleepTimeMulti])){
             temp[0] = 20;
         }else{
             temp[0] = 18;
