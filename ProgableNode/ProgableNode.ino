@@ -894,6 +894,10 @@ boolean readMessage(char *message){
                 eeprom_write_byte(&eeConfig[regNr], atoi(parts[i + 2]));
                 //Daten in das Abbild uebernehemn
                 config[regNr] = eeprom_read_byte(&eeConfig[regNr]);
+                //Timer ausrechnen und variablen neu initialisieren
+                SensorPeriod = config[sensorDelay] * timemultiplierSensor;
+                WatchdogPeriod = config[watchdogDelay] * timemultiplierWD;
+                WdPinTimeout = config[watchdogTimeout] * timemultiplierWD;
                 char temp[10] = "w_";
                 strncat(temp, parts[i+1],2);
                 sendInt(temp, config[regNr]);
