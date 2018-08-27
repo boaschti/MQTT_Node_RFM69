@@ -187,6 +187,9 @@ uint8_t eeEncryptKey[16+1] EEMEM;
 #define delOldData          5       //Die alten Daten die evtl nicht gesendet wurden werden in einem neuen Aufwachzyklus geloescht
 #define sendAgain           6       //Die alten Daten die evtl nicht gesendet wurden werden nach einem wd Zyklus (8s) erneut gesendet
 
+//Einstellen von Verhalten aufgrund externer Hardware
+#define extCrystal          0       //Wenn ein externer Quarz verbaut ist
+
 //Die folgenden Definitionen zeigen die Stelle im BYTE Array wo die Einstellungen gespeichert sind:
 //Man kann direkt auf das ARRAY per Funk zugreifen die Werte sind immer dezimal:
 //"w_5":"3" -> Zum Schreiben einer 3 an Stelle 5
@@ -211,6 +214,7 @@ uint8_t eeEncryptKey[16+1] EEMEM;
 #define  digitalSensors         15
 #define  digitalOut             16
 
+#define  chipSetup              19
 #define  nodeControll           20
 #define  sleepTimeMulti         21    //sleepTime Multiplikator
 #define  sleepTime              22    //Sleep time in Sekunden * 8 sec, Wenn der Timer gesetzt ist wird auch die Batteriespannung gemessen
@@ -602,19 +606,24 @@ void setup()
     }
     
     uint8_t printOK = 1;
-    
-    if (!(eeprom_read_byte(&eeConfig[oscCalError]))){
-        eeprom_write_byte(&eeConfig[oscCalError], 1);
-        wdt_enable(WDTO_8S);
-        if (!oscCalibration() && SendAlowed) {
-            const char errorString[] = "\"state\":\"oscCal\"";
+    if (!(config[chipSetup] & (1<<extCrystal))){
+        if (!(eeprom_read_byte(&eeConfig[oscCalError]))){
+            eeprom_write_byte(&eeConfig[oscCalError], 1);
+            wdt_enable(WDTO_8S);
+            if (!oscCalibration() && SendAlowed) {
+                const char errorString[] = "\"state\":\"oscCal\"";
+                rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
+            }
+            eeprom_write_byte(&eeConfig[oscCalError], 0);
+            disableWd();
+        }else if (SendAlowed){
+            printOK = 0;
+            const char errorString[] = "\"state\":\"oscCal_skiped\"";
             rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
         }
-        eeprom_write_byte(&eeConfig[oscCalError], 0);
-        disableWd();
     }else if (SendAlowed){
         printOK = 0;
-        const char errorString[] = "\"state\":\"oscCal_skiped\"";
+        const char errorString[] = "\"info\":\"oscCal_skiped\"";
         rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
     }
     
@@ -1042,24 +1051,46 @@ void read_bme(void){
 
 void read_Dallas(void)
 {
-    
-    //Nach dem einschalten des Sensors muss man min 1sec warten bis der Sensor richtige Daten liefert. Das muss der Aufrufer garantieren.
 
     float temp_F;
+    static boolean init = false;
     
+    if (!init){
+        dallas.begin();
+        init = true;
+        delay(1500);
+    }
+    
+    dallas.requestTemperatures();
+    
+    //DeviceAddress  DS18B20;
+    uint8_t DS18B20[8];
+
     for (uint8_t i = 0; i < dallas.getDeviceCount(); i++){
-        char temp[7] = "Dt";
+        char temp[17] = "Dt";
         temp_F = dallas.getTempCByIndex(i);
         //dtostrf(floatVar, minStringWidthIncDecimalPoint, numVarsAfterDecimal, charBuf);
         char wert[6];
         dtostrf(temp_F, 3, 1, wert);
-        char *dsAddr;
-        dallas.getAddress(dsAddr, i);
-        strncat(temp,dsAddr,3); //Wir wollen nur 3 Stellen der Addresse senden
+        dallas.getAddress(DS18B20, i);
+        //Wir wollen nur 3 Stellen der Addresse senden
+        for (uint8_t ii = 0; ii<3; ii++){
+            char tempA[5];
+            itoa(DS18B20[ii], tempA, 10);      
+            strncat(temp,tempA,3); 
+            if (ii < 2){
+                strncat(temp,".",3);
+            }
+        }
         write_buffer_str(temp, wert);
+        if (i > 100){
+            write_buffer_str("info", "count error");
+            break;
+        }
     }
-
+    
     if (dallas.getDeviceCount() == 0){
+        init = false;
         write_buffer_str("state", "error no Dallas");
     }   
 }
