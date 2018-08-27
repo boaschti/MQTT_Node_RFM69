@@ -189,6 +189,7 @@ uint8_t eeEncryptKey[16+1] EEMEM;
 #define displayAlwaysOn     4       //Das Display wird im sleep nicht abgeschaltet
 #define delOldData          5       //Die alten Daten die evtl nicht gesendet wurden werden in einem neuen Aufwachzyklus geloescht
 #define sendAgain           6       //Die alten Daten die evtl nicht gesendet wurden werden nach einem wd Zyklus (8s) erneut gesendet
+#define displayLongOn       7       //Das Display wird 40 sec nach dem Einschlafen aktiv gehalten
 
 //Einstellen von Verhalten aufgrund externer Hardware
 #define extCrystal          0       //Wenn ein externer Quarz verbaut ist
@@ -1353,7 +1354,7 @@ void go_sleep(boolean shortSleep = false){
     
     //Wenn ein Display verbaut ist und sensorPowerSleep nicht gesetzt ist
     if ((config[digitalOut] & (1<<ssd1306_128x64)) || (config[digitalOut] & (1<<ssd1306_64x48))){
-        if (!(config[nodeControll] & (1<<displayAlwaysOn))){
+        if (!((config[nodeControll] & (1<<displayAlwaysOn)) || (config[nodeControll] & (1<<displayLongOn)))){
             u8x8.setPowerSave(1);
         }
     }
@@ -1392,6 +1393,17 @@ void go_sleep(boolean shortSleep = false){
         sei();
         
         sleep_mode();           // here the device is actually put to sleep!!
+
+        //Wenn das Display noch aktiv ist und displayLongOn gesetzt ist dann wollen wir es nach 40 s ausschalten
+        if (i = 4){
+            if ((config[digitalOut] & (1<<ssd1306_128x64)) || (config[digitalOut] & (1<<ssd1306_64x48))){
+                if (config[nodeControll] & (1<<displayLongOn)){
+                    PRR = oldPRR;
+                    u8x8.setPowerSave(1);
+                    PRR = 0;
+                }
+            }        
+        }
         
         if (BreakSleep){		//Sleep untebrechen wenn ein Interrupt von einem Eingang kam
             break;
