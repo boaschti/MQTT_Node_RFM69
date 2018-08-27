@@ -167,6 +167,7 @@ uint8_t eeEncryptKey[16+1] EEMEM;
 #define readDS18        0           //(Pins s. defines ONE_WIRE_BUS)
 #define readHC05        1           //Ultraschall Sensor (Pins s. defines HC05pingPin und HC05trigPin)
 #define readBME         2           //BME280 und BMP280 (Standart I2C Pins)
+#define debounceLong    3           //Wenn ein Schalter lang prellt muss ein extra langer debounce ausgeführt werden
 
 
 //Zum kofigurieren von digitalen Aktoren muss man nur angeben welche Aktoren verbaut sind.
@@ -1403,6 +1404,17 @@ void go_sleep(boolean shortSleep = false){
                     PRR = 0;
                 }
             }        
+        }
+        
+        // Bugfix: Wenn ein Schalter während des Aufwachens (StartupTime aus den Fusebits) toggelt und unmittelbar nach der 
+        // Aufwachzeit zufällig den Ursprungszustand (wie beim einschlafen) hat dann wird der Interrupt nicht unmittelbar
+        // nach dem Aufwachen ausgeführt sondern erst wenn der Pin wieder auf den NICHT Ursprungzustand toggelt. Das hat 
+        // in diesem Fall zur Folge, dass der BreakSleep noch nicht gesetzt ist und somit zwar die CPU aufwacht, den Port(
+        // dessen Interrupt di CPU aufweckte) in den SendeBuffer schreibt und dannach wieder einschläft weil diese Schleife 
+        // eben nicht verlassen wird. In diesem Fall wird nicht gesendet. Beim nächsten Mal könnte das gut gehen und man bekommt
+        // die alten und neuen Daten geschickt.        
+        if (config[digitalSensors] & (1<<debounceLong)){
+            delay(100);
         }
         
         if (BreakSleep){		//Sleep untebrechen wenn ein Interrupt von einem Eingang kam
