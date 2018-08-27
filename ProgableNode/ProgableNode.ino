@@ -54,7 +54,9 @@ Modifications Needed:
 #define ACK_TIME		30 // Wartezeit auf einen ACK
 
 #define ResetRfmPin		2
-#define rxPollTime		450 // Zeit in ms (ca) die auf eine Message gewartet wird bevor der Node in den Sleep geht
+#define rxPollTime		450           // Zeit in ms (ca) die auf eine Message gewartet wird bevor der Node in den Sleep geht
+#define timemultiplierWD 5000UL       // ms 
+#define timemultiplierSensor 10000UL  // ms 
 
 #define JP_1		  16 //PC2 
 #define JP_2		  15 //PC1
@@ -122,6 +124,7 @@ volatile boolean SendAlowed = true;
 volatile boolean ThermostatPresent = false;
 volatile boolean ShowLeds = false;
 
+bool wdMsgSend = false;
 
 //end Board Defines ---------------------------------------------------------------------------------------------------
 
@@ -141,13 +144,13 @@ uint8_t eeEncryptKey[16+1] EEMEM;
 
 //Bits der Variablen funktion_pin..
 #define in_out          0           //DDR wie im Atmel Datenblatt 0=in
-#define port            1           //PORT wie im Atmel Datenblatt 1=High(im outputMode)/1=Pullup(im inputMode)
+#define port            1           //PORT wie im Atmel Datenblatt 1=High(im outputMode)/1=Pullup(im inputMode) sowie zustand in den der Port bei ablaufen des WD faellt
 #define intRise         2           //Der Pin loest einen Interrupt aus (aufwachen aus dem Sleep und sofortiges lesen des Pins wenn readInput gesetzt ist)
 #define intFall         3           //todo Der Pin gibt ein software PWM Signal aus
-#define wdDefault       4           //Zustand in den der watchdog faellt wenn er nicht getriggert wird (nur wenn kein sleep aktiv ist!)
+#define free            4           
 #define wdReq           5           //Watchdog fuer diesen Pin aktivieren
 #define readInput       6           //Ruecklesen des Pins und senden der Daten (polling fuer Interrupt pcInt setzen)
-#define count           7
+#define count           7           //Wenn die anzahl der Schaltvorgaenge gezaehlt werden soll
 
 //Zum konfigurieren der analog Inputs muss man angeben wie der Wert verrechnet wird.
 //Bits der Variablen math_analog..
@@ -218,7 +221,7 @@ uint8_t eeEncryptKey[16+1] EEMEM;
 #define  nodeControll           20
 #define  sleepTimeMulti         21    //sleepTime Multiplikator
 #define  sleepTime              22    //Sleep time in Sekunden * 8 sec, Wenn der Timer gesetzt ist wird auch die Batteriespannung gemessen
-#define  watchdogTimeout        23    //watchdog in * 8 sec, Zeit bis zum abfallen des Watchdogs und setzen der Pins auf den vorgegebenen Zustand (wdDefault). Der Sleep wird gesperrt wenn der Watchdog nicht abgefallen ist.
+#define  watchdogTimeout        23    //watchdog in * 8 sec, Zeit bis zum abfallen des Watchdogs und setzen der Pins auf den vorgegebenen Zustand (port). Der Sleep wird gesperrt wenn der Watchdog nicht abgefallen ist.
 #define  watchdogDelay          24    //watchdog in * 5 sec, Zeit bis zum nachsten senden eines Watchdogs (Nur wenn sleepTime == 0 konfiguriert ist oder der watchdog durch staendiges Nachtriggern den Sleep blokiert. Ansonsten wird der Watchdog sofort nach dem Aufwachen gesendet wenn watchdogDelay>0)
 
 #define  contrast               26
@@ -467,9 +470,10 @@ void initVariables(void)
         counter[i] = 0;
     }
     
-    SensorPeriod = config[sensorDelay] * 10000;
-    WatchdogPeriod = config[watchdogDelay] * 5000;
-    WdPinTimeout = config[watchdogTimeout] * 5000;
+    SensorPeriod = config[sensorDelay] * timemultiplierSensor;
+    WatchdogPeriod = config[watchdogDelay] * timemultiplierWD;
+    WdPinTimeout = config[watchdogTimeout] * timemultiplierWD;
+    WdTrigTimeStamp = millis() - WdPinTimeout;
     //Wir wollen den SLeep erst frei geben wenn der Watchdog abgelaufen ist
     if (WdPinTimeout > 0){
         SleepAlowed = false;
@@ -794,6 +798,16 @@ void sendInt(char *name, uint8_t wert, boolean sendImmidiatelly = true){
     }
 }
 
+void sendLong(char *name, unsigned long wert, boolean sendImmidiatelly = true){
+    
+    char temp[5];
+    ltoa(wert, temp, 10);
+    write_buffer_str(name, &temp[0]);
+    if (sendImmidiatelly){
+        write_buffer_str("",""); //sende Daten
+    }
+}
+
 boolean readMessage(char *message){
     // Message str input: "R_12":"125"
     //Diese folgende Schleife macht aus dem String 3 oder eine vielzahl von 3 NULL terminierte Strings
@@ -959,6 +973,8 @@ boolean readMessage(char *message){
         //den Watchdog nachtriggern
         if (strcmp(parts[i] , "wd") == 0){
             WdTrigTimeStamp = millis();
+            sendLong("info", WdTrigTimeStamp, false);
+            wdMsgSend = false;
             SleepAlowed = false;		
             i += 2;
         }
@@ -1492,7 +1508,7 @@ void reset_wdPins(void){
     
     for (uint8_t i = 0; i<usedDio; i++){
         if (config[i] & (1<<wdReq)){
-            if (config[i] & (1<<wdDefault)){
+            if (config[i] & (1<<port)){
                 digitalWrite(pinMapping[i], HIGH);
             }else{
                 digitalWrite(pinMapping[i], LOW);
@@ -1504,7 +1520,7 @@ void reset_wdPins(void){
 //---------------------------------------------------------------------------------------------
 void loop()
 {  
-    long timepassed;
+    unsigned long timepassed;
 
     static long sensorTimeOld;
     static long watchdogTimeOld;
@@ -1571,6 +1587,10 @@ void loop()
 
     timepassed = millis() - WdTrigTimeStamp;
     if (timepassed > WdPinTimeout){
+        if (!wdMsgSend){
+          write_buffer_str("info","wd expiered");
+          wdMsgSend = true;
+        }
         reset_wdPins();
         SleepAlowed = true;
     }
