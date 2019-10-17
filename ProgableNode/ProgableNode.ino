@@ -107,6 +107,14 @@ U8X8_SSD1306_128X64_NONAME_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE);
     #define HC05pingPin 	0
     #define HC05trigPin		1
 
+  
+//device FuelHigh Sensor 
+
+    #define PumpXtimes    2
+    #define AirPumpPin    0
+    
+    
+    
 #define SERIAL_BAUD 9600
 
 
@@ -156,7 +164,7 @@ uint8_t eeEncryptKey[16+1] EEMEM;
 //Bits der Variablen math_analog..
 #define readPlant       0           //Arduino Pflanzen Feuchte Sensor (untested)
 #define readLDR         1           //Photo Widerstand 10k pulldown
-#define readRain        2           //Arduino Regen Sensor
+#define readFuelHigh    2           //Honewell ABPDANT005PGAA5 Staudruck wasser umgerechnet in cm
 #define readRaw         3           //raw adc Wert
 #define readVolt        4           //reads voltage of a ADC
 #define multi2         6            //multiply ADC / 2 
@@ -1146,6 +1154,20 @@ void read_analog(void){
     
     for (uint8_t i = 10; i < (usedAnalog + 10); i++){
         if (config[i] != 0){
+            if (config[i] & (1<<readFuelHigh)){
+                static uint8_t PumpCounter = 1;
+                PumpCounter--;
+                if ((PumpCounter == 0)){
+                    PumpCounter = PumpXtimes;
+                    pinMode(AirPumpPin, OUTPUT);
+                    digitalWrite(AirPumpPin, HIGH);
+                    // Pumpe das Wasser aus dem Messrohr
+                    delay(10000);
+                    digitalWrite(AirPumpPin, LOW);
+                    // Wareten bis sich der Staudruck stabilisiert hat 
+                    delay(500);
+                }
+            }
             char temp[6] = "Ai";
             char tempindex[3];
             char wert[7];
@@ -1155,20 +1177,40 @@ void read_analog(void){
             adcValue = analogRead(pinMapping[i]);
             if (config[i] & (1<<readPlant)){
                 
-            }else if (config[i] & (1<<readRain)){
-                
             }else if (config[i] & (1<<readLDR)){
-                // GND----[_10K_]--+--LDR----VDD
+                // GND----[_10K_]--+--LDR----VDD 
                 //                 |________ADin
                 //Wir muessen nichts berechnen
                 
             }else if (config[i] & (1<<readRaw)){
                 //Wir muessen nichts berechnen
-            }else if (config[i] & (1<<readVolt)){
+            }else if ((config[i] & (1<<readVolt)) || (config[i] & (1<<readFuelHigh))){
                 uint16_t Vref = read_Vcc(false);
                 float voltPerCount = Vref / 1023.0;
                 voltPerCount *= adcValue;                
                 adcValue = voltPerCount;
+            }
+            if (config[i] & (1<<readFuelHigh)){
+                // Wir rechnen mit der Spannung weiter 
+                // Vsupply = 5V
+                // 10% von Vsupply = 0 psi
+                // 90% von Vsupply = 5 psi 
+                // 1psi = 68,9mbar = 70,31cm
+                // 2psi = 137,89mbar = 140,6cm
+                // 3psi = 206mbar = 210.9cm
+                float fuellstand;
+                int16_t adcValue2;
+                adcValue2 = adcValue - 500; // -500mV
+                if (adcValue2 < 0){
+                    adcValue2 = 0;
+                }
+                adcValue2 *= 3;          //11.378 == 4000mV / 5psi / 70,31cm
+                adcValue2 /= 34;
+                // Messung 1 103cm messwert 100
+                // Messung 2 200cm messwert 198
+                //fuellstand = adcValue / 11.378; // 4000mV / 5psi / 70,31cm
+                //adcValue = fuellstand;
+                adcValue = adcValue2;
             }
             if (config[i] & (1<<multi2)){
                 adcValue *= 2;
