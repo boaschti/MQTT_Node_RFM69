@@ -800,7 +800,7 @@ void setup()
     return true;
 }
 
-void sendInt(char *name, uint8_t wert, boolean sendImmidiatelly = true){
+void sendInt(char *name, uint16_t wert, boolean sendImmidiatelly = true){
     
     char temp[5];
     itoa(wert, temp, 10);
