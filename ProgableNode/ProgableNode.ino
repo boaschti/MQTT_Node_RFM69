@@ -1111,7 +1111,7 @@ void read_Dallas(void)
             itoa(DS18B20[ii], tempA, 10);      
             strncat(temp,tempA,3); 
             if (ii < 2){
-                strncat(temp,".",3);
+                strncat(temp,"_",3);
             }
         }
         write_buffer_str(temp, wert);
@@ -1123,7 +1123,7 @@ void read_Dallas(void)
     
     if (dallas.getDeviceCount() == 0){
         init = false;
-        write_buffer_str("state", "error no Dallas");
+        write_buffer_str("info", "error no Dallas");
     }   
 }
 
