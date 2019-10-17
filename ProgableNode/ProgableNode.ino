@@ -548,9 +548,11 @@ void setupDefaultPins(void){
 
 void disableWd(void){
     //Reset WD Timer
-    MCUSR &= ~(1<<WDRF);
-    WDTCSR |= (1<<WDCE) | (1<<WDE);
-    WDTCSR = 0;
+    wdt_disable();
+    
+    //MCUSR &= ~(1<<WDRF);
+    //WDTCSR |= (1<<WDCE) | (1<<WDE);
+    //WDTCSR = 0;
 }
 
 void setup()
@@ -1379,6 +1381,9 @@ boolean get_saved_Massages(boolean getBackupMsg = false){
 
 void go_sleep(boolean shortSleep = false){
     PCinterrupt = false;
+    BreakSleep = false;
+    
+    disableWd();
     
     if (config[nodeControll] & (1<<debugLed)){
         digitalWrite(LedPinMapping[1], LOW);
@@ -1388,8 +1393,7 @@ void go_sleep(boolean shortSleep = false){
         digitalWrite(supplyPin, LOW);
     }
     
-    rfm69.sleep();
-
+    
     if (config[digitalSensors] & (1<<readBME)){
         bme.sleepMode();
     }
@@ -1406,7 +1410,6 @@ void go_sleep(boolean shortSleep = false){
         }
     }
     
-    //todo BME sleep
     uint8_t oldADMUX = ADMUX;
     ADMUX = 0;
     uint8_t oldADCSRA = ADCSRA;
@@ -1426,7 +1429,11 @@ void go_sleep(boolean shortSleep = false){
         iInit--;
     }
     
-    for (uint16_t i = iInit; i < (config[sleepTime] * config[sleepTimeMulti]); i++){
+    uint16_t destSleepTime = config[sleepTime] * config[sleepTimeMulti];
+    
+    rfm69.sleep();
+    
+    for (uint16_t i = iInit; i < destSleepTime; i++){
         //Wenn der Sensor versorgt werden soll und die Spannung erhöht werden soll
         if ((config[nodeControll] & (1<<pumpSensorVoltage)) && (config[nodeControll] & (1<<sensorPowerSleep))){
             digitalWrite(supplyPin, HIGH);
@@ -1442,7 +1449,7 @@ void go_sleep(boolean shortSleep = false){
         sleep_mode();           // here the device is actually put to sleep!!
 
         //Wenn das Display noch aktiv ist und displayLongOn gesetzt ist dann wollen wir es nach 40 s ausschalten
-        if (i = 4){
+        if (i == 4){
             if ((config[digitalOut] & (1<<ssd1306_128x64)) || (config[digitalOut] & (1<<ssd1306_64x48))){
                 if (config[nodeControll] & (1<<displayLongOn)){
                     PRR = oldPRR;
@@ -1462,7 +1469,8 @@ void go_sleep(boolean shortSleep = false){
         if (config[digitalSensors] & (1<<debounceLong)){
             delay(100);
         }
-        
+
+
         if (BreakSleep){		//Sleep untebrechen wenn ein Interrupt von einem Eingang kam
             break;
         }else if (PCinterrupt){
@@ -1471,7 +1479,6 @@ void go_sleep(boolean shortSleep = false){
         }
         
     }
-    
     disableWd();
     PRR = oldPRR;
     ADMUX = oldADMUX;
@@ -1481,7 +1488,7 @@ void go_sleep(boolean shortSleep = false){
     if (config[digitalSensors] & (1<<readBME)){
         bme.normalMode();
     }
-
+  
     //Wenn der Sensor während des Sleeps nicht versorgt wurde schalten wir ihn hier wieder ein
     if (config[nodeControll] & (1<<sensorPower)){
         digitalWrite(supplyPin, HIGH);
@@ -1494,6 +1501,10 @@ void go_sleep(boolean shortSleep = false){
     if (config[nodeControll] & (1<<debugLed)){
         digitalWrite(LedPinMapping[1], HIGH);
     }
+    
+    // Test, es gibt den seltenen Fall dass die Node nicht mehr in den Sleep Mode kommt und hängt
+    wdt_enable(WDTO_8S);
+    
 }
 
 boolean read_inputs(boolean readAll = false){
