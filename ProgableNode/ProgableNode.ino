@@ -1664,7 +1664,9 @@ void loop()
     }
 
     //Zum leeren des Buffers und senden aller Daten
-    write_buffer_str("","");
+    //if (rfm69.readRSSI() < CSMA_LIMIT){
+        write_buffer_str("","");
+    //}
 
     timepassed = millis() - WdTrigTimeStamp;
     if (timepassed > WdPinTimeout){
