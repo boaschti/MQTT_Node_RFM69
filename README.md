@@ -146,6 +146,74 @@ switch:
     retain: true
 ```
 
+**Watchdog**
+'''
+input_boolean:
+  trigger_wd_terrasse:
+    name: Watchdog Terrasse
+    initial: off
+  switch_terrasse_m:
+    name: Terrasse m
+    initial: off
+
+automation:
+  - alias: Trigger Watchdog
+    trigger:
+      platform: state
+      entity_id: input_boolean.trigger_wd_terrasse
+      to: "on"
+    action:
+      - service: mqtt.publish
+        data_template:
+          topic: "rfmOut/146/116/wd"
+          retain: false
+          payload: "{\"wd_0\":\"0\"}"
+      - service: input_boolean.turn_off
+        data: 
+          entity_id: input_boolean.trigger_wd_terrasse    
+  
+  - alias: Trigger Watchdog auto
+    trigger:
+      platform: time
+      seconds: 59
+    condition:
+      condition: or
+      conditions:
+        - condition: state
+          entity_id: input_boolean.switch_terrasse_vl
+          state: "on"
+        - condition: state
+          entity_id: input_boolean.switch_terrasse_m
+          state: "on"
+    action:
+      service: input_boolean.turn_on
+      data: 
+        entity_id: input_boolean.trigger_wd_terrasse  
+        
+  - alias: Start Timer Terrasse m
+    trigger:
+      platform: state
+      entity_id: input_boolean.switch_terrasse_m
+      to: "on"
+    action:
+      service: mqtt.publish
+      data_template:
+        topic: "rfmOut/146/116/p_5"
+        retain: false
+        payload: "{\"wd_0\":\"0\", \"p_5\":\"1\"}"
+
+  - alias: Schalte Ventil Terrasse m aus
+    trigger:
+      platform: state
+      entity_id: input_boolean.switch_terrasse_m
+      to: "off"
+    action:
+      service: mqtt.publish
+      data_template:
+        topic: "rfmOut/146/116/p_5"
+        retain: false
+        payload: "{\"p_5\":\"0\"}"
+'''
 ### Hardware
 ![alt text](https://github.com/boaschti/MQTT_Node_RFM69/blob/master/pictures/nodeHardware.jpg)
 ![alt text](https://github.com/boaschti/MQTT_Node_RFM69/blob/master/pictures/nodeHardware2.jpg)
