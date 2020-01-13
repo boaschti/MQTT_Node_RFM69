@@ -40,7 +40,8 @@ Modifications Needed:
 #include <RFM69registers.h>
 #include <avr/power.h>
 
-#define ArduinoSPSNode
+//#define ArduinoSPSNode
+
 //Standardkonfig wird uebernommen wenn JP_2 == GND oder funktion_pin0 == 255 (Komando "w_0":"255")
 #define DEFAULTNODEID        254                    //nur einmal im Netzwerk vorhanden
 #define DEFAULTNETWORKID     1                      //bei allen Nodes im Netzwerk gleich
@@ -944,7 +945,7 @@ boolean readMessage(char *message){
                 WdPinTimeout = config[watchdogTimeout] * timemultiplierWD;
                 char temp[10] = "w_";
                 strncat(temp, parts[i+1],2);
-                sendInt(temp, config[regNr]);
+                sendInt(temp, config[regNr], false);
                 i += 2;
                 //Wir wollen in einem sauberen Zustand starten manche Werte koennen ohne Neustart uebernommen werden
                 if (!((regNr == 20) || (regNr == 21) || (regNr == 22) || (regNr == 23) || (regNr == 24))){
@@ -956,7 +957,7 @@ boolean readMessage(char *message){
         if (strcmp(parts[i] , "r") == 0){
             char temp[10] = "w_";
             strncat(temp, parts[i+1],2);
-            sendInt(temp, config[atoi(parts[i + 1])]);
+            sendInt(temp, config[atoi(parts[i + 1])], false);
             i += 2;
         }
         //zum lesen der gesamten konfig rAll
@@ -1043,15 +1044,15 @@ boolean readMessage(char *message){
     }
     if (resetCPU){
         // Wenn ein Sleep programmiert ist unsubscriben wir uns und das Gateway soll sich merken dass wir schlafen -> 18
-        char temp[1];
+        /*char temp[1];
         temp[0] = 18;
         if (SendAlowed) {
             rfm69.sendWithRetry(config[gatewayId], temp, sizeof(temp));
-        }
-        write_buffer_str("state", "restart_Node", true);
-        write_buffer_str("","");	
-        wdt_enable(WDTO_15MS);
-        while(1);
+        }*/
+        write_buffer_str("state", "restart_Node_wait_8s");
+        //write_buffer_str("","");
+        wdt_reset();
+        wdt_enable(WDTO_8S);
     }
 }
 
