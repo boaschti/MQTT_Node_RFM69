@@ -40,6 +40,7 @@ Modifications Needed:
 #include <RFM69registers.h>
 #include <avr/power.h>
 
+#define ArduinoSPSNode
 //Standardkonfig wird uebernommen wenn JP_2 == GND oder funktion_pin0 == 255 (Komando "w_0":"255")
 #define DEFAULTNODEID        254                    //nur einmal im Netzwerk vorhanden
 #define DEFAULTNETWORKID     1                      //bei allen Nodes im Netzwerk gleich
@@ -243,14 +244,25 @@ uint8_t eeEncryptKey[16+1] EEMEM;
 #define  oscCalError            32    //internal
 
 //In den folgenden Definitionen ist das PinMapping beschrieben: fur digtal IOs config[0]:config[9], fur analog Is config[10]:config[14].
-#define usedDio                 7       //Anzahl der verwendetetn DIOs
-#define usedAnalog              4       //Anzahl der verwendetetn analog In
-const uint8_t pinMapping[15]{1,0,19,18,9,16,17,0,0,0,2,3,4,5,0};
-//der SSPin macht noch Probleme Spi funktioniert dann nicht mehr!
-//const uint8_t pinMapping[15]{0,1,17,18,19,9,10,0,0,0,3,4,5,0,0};
-unsigned long counter[usedDio];
-const uint8_t LedPinMapping[3]{5,6,7};
-
+#ifndef ArduinoSPSNode
+  #define usedDio                 7       //Anzahl der verwendetetn DIOs
+  #define usedAnalog              4       //Anzahl der verwendetetn analog In
+  #define offsetAnalogConfig      10      //offset der analogen konfig
+  const uint8_t pinMapping[15]{1,0,19,18,9,16,17,0,0,0,2,3,4,5,0};
+  //der SSPin macht noch Probleme Spi funktioniert dann nicht mehr!
+  //const uint8_t pinMapping[15]{0,1,17,18,19,9,10,0,0,0,3,4,5,0,0};
+  unsigned long counter[usedDio];
+  const uint8_t LedPinMapping[3]{5,6,7};
+#else
+  #define usedDio                 10       //Anzahl der verwendetetn DIOs
+  #define usedAnalog              6       //Anzahl der verwendetetn analog In
+  #define offsetAnalogConfig      9      //offset der analogen konfig
+  const uint8_t pinMapping[15]{15,16,17,18,19,6,7,8,9,1,2,3,4,5,6};
+  //der SSPin macht noch Probleme Spi funktioniert dann nicht mehr!
+  //const uint8_t pinMapping[15]{0,1,17,18,19,9,10,0,0,0,3,4,5,0,0};
+  unsigned long counter[usedDio];
+  const uint8_t LedPinMapping[3]{0,0,0};
+#endif
 // Typische Led Farben: 0:Gruen 1:Gelb/Org 2:Rot
 
 #define bit_set(p,m) ((p) |= (1<<m))
@@ -288,6 +300,7 @@ void pciDisable(byte pin)
     *digitalPinToPCMSK(pin) &= ~bit (digitalPinToPCMSKbit(pin));  // disable pin
 }
 
+#ifndef ArduinoSPSNode
 boolean oscCalibration(void){
     
     //Timer1 laufen lassen
@@ -437,16 +450,21 @@ boolean oscCalibration(void){
 
 
 }
+#endif // ArduinoSPSNode
+
 
 boolean getJumper(void){
-
-        pinMode(JP_2, INPUT_PULLUP);
-        delay(1);
-        if (digitalRead(JP_2)){
-            return false;
-        }else{
-            return true;
-        }
+        #ifndef ArduinoSPSNode
+          pinMode(JP_2, INPUT_PULLUP);
+          delay(1);
+          if (digitalRead(JP_2)){
+              return false;
+          }else{
+              return true;
+          }
+        #else
+          return false;
+        #endif
 }
 
 void initVariables(void)
@@ -566,8 +584,12 @@ void setup()
     setupDefaultPins();
     //reset_wdPins(); 
     
+    #ifndef ArduinoSPSNode
     digitalWrite(LedPinMapping[2], HIGH);
-
+    #else
+    digitalWrite(LedPinMapping[2], LOW);
+    #endif
+    
     //RFM69-------------------------------------------
     //Reset
     digitalWrite(ResetRfmPin, HIGH);
@@ -577,11 +599,11 @@ void setup()
     //Init RFM69
 
     if (!rfm69.initialize(FREQUENCY, config[nodeId], config[networkId])){
-        for (uint8_t i = 0; i<5; i++){
-            digitalWrite(LedPinMapping[2], LOW);
-            delay(100);
-            digitalWrite(LedPinMapping[2], HIGH);
-            delay(100);
+        for (uint8_t i = 0; i<20; i++){
+              digitalWrite(LedPinMapping[2], LOW);
+              delay(100);
+              digitalWrite(LedPinMapping[2], HIGH);
+              delay(100);
         }
     }
 
@@ -622,26 +644,28 @@ void setup()
     }
     
     uint8_t printOK = 1;
-    if (!(config[chipSetup] & (1<<extCrystal))){
-        if (!(eeprom_read_byte(&eeConfig[oscCalError]))){
-            eeprom_write_byte(&eeConfig[oscCalError], 1);
-            wdt_enable(WDTO_8S);
-            if (!oscCalibration() && SendAlowed) {
-                const char errorString[] = "\"state\":\"oscCal\"";
-                rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
-            }
-            eeprom_write_byte(&eeConfig[oscCalError], 0);
-            disableWd();
-        }else if (SendAlowed){
-            printOK = 0;
-            const char errorString[] = "\"state\":\"oscCal_skiped\"";
-            rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
-        }
-    }else if (SendAlowed){
-        printOK = 0;
-        const char errorString[] = "\"info\":\"oscCal_skiped\"";
-        rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
-    }
+    #ifndef ArduinoSPSNode
+      if (!(config[chipSetup] & (1<<extCrystal))){
+          if (!(eeprom_read_byte(&eeConfig[oscCalError]))){
+              eeprom_write_byte(&eeConfig[oscCalError], 1);
+              wdt_enable(WDTO_8S);
+              if (!oscCalibration() && SendAlowed) {
+                  const char errorString[] = "\"state\":\"oscCal\"";
+                  rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
+              }
+              eeprom_write_byte(&eeConfig[oscCalError], 0);
+              disableWd();
+          }else if (SendAlowed){
+              printOK = 0;
+              const char errorString[] = "\"state\":\"oscCal_skiped\"";
+              rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
+          }
+      }else if (SendAlowed){
+          printOK = 0;
+          const char errorString[] = "\"info\":\"oscCal_skiped\"";
+          rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
+      }
+    #endif
     
     //device UART
     if (config[digitalOut] & (1<<uart)){
@@ -663,8 +687,15 @@ void setup()
         const char errorString[] = "\"state\":\"Ok\"";
         rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
     }
+    
+    #ifndef ArduinoSPSNode
+      digitalWrite(LedPinMapping[2], LOW);
+    #else
+      if (!(config[digitalOut] & (1<<uart))){
+          digitalWrite(LedPinMapping[2], HIGH);
+      }
+    #endif
 
-    digitalWrite(LedPinMapping[2], LOW);
 }
 
  boolean write_buffer_str(char *name, char *wert, boolean strWert = false, boolean deleteBuf = false )
@@ -954,6 +985,7 @@ boolean readMessage(char *message){
             i += 2;
         }
         if (strcmp(parts[i] , "led") == 0){
+#ifndef ArduinoSPSNode
             if (strcmp(parts[i+2] , "blink") == 0){
                 digitalWrite(LedPinMapping[atoi(parts[i + 1])], HIGH);
                 delay(100);
@@ -963,6 +995,17 @@ boolean readMessage(char *message){
             }else{
                 digitalWrite(LedPinMapping[atoi(parts[i + 1])], LOW);
             }
+#else
+            if (strcmp(parts[i+2] , "blink") == 0){
+                digitalWrite(LedPinMapping[atoi(parts[i + 1])], LOW);
+                delay(100);
+                digitalWrite(LedPinMapping[atoi(parts[i + 1])], HIGH);
+            }else if(strcmp(parts[i+2] , "1") == 0){
+                digitalWrite(LedPinMapping[atoi(parts[i + 1])], LOW);
+            }else{
+                digitalWrite(LedPinMapping[atoi(parts[i + 1])], HIGH);
+            }
+#endif
         }
         if (strcmp(parts[i] , "key") == 0){
             eeprom_write_block(parts[i+2],  &eeEncryptKey, 16+1);
@@ -1463,11 +1506,11 @@ void go_sleep(boolean shortSleep = false){
         // Aufwachzeit zufällig den Ursprungszustand (wie beim einschlafen) hat dann wird der Interrupt nicht unmittelbar
         // nach dem Aufwachen ausgeführt sondern erst wenn der Pin wieder auf den NICHT Ursprungzustand toggelt. Das hat 
         // in diesem Fall zur Folge, dass der BreakSleep noch nicht gesetzt ist und somit zwar die CPU aufwacht, den Port(
-        // dessen Interrupt di CPU aufweckte) in den SendeBuffer schreibt und dannach wieder einschläft weil diese Schleife 
+        // dessen Interrupt die CPU aufweckte) in den SendeBuffer schreibt und dannach wieder einschläft weil diese Schleife 
         // eben nicht verlassen wird. In diesem Fall wird nicht gesendet. Beim nächsten Mal könnte das gut gehen und man bekommt
         // die alten und neuen Daten geschickt.        
         if (config[digitalSensors] & (1<<debounceLong)){
-            delay(100);
+            delay(50);
         }
 
 
