@@ -114,6 +114,9 @@ U8X8_SSD1306_128X64_NONAME_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE);
     #define PumpXtimes    2
     #define AirPumpPin    0
     
+//ADC Hysterese für das automatische senden des ADC Wertes
+
+    #define adcHysterese 0x0032
     
     
 #define SERIAL_BAUD 9600
@@ -1195,9 +1198,9 @@ uint16_t read_Vcc(boolean sendWert = true){
     return result;
 }
 
-void read_analog(void){
+void read_analog(boolean check = true){
     
-    for (uint8_t i = 10; i < (usedAnalog + 10); i++){
+    for (uint8_t i = offsetAnalogConfig; i < (usedAnalog + offsetAnalogConfig); i++){
         if (config[i] != 0){
             if (config[i] & (1<<readFuelHigh)){
                 static uint8_t PumpCounter = 1;
@@ -1209,62 +1212,76 @@ void read_analog(void){
                     // Pumpe das Wasser aus dem Messrohr
                     delay(10000);
                     digitalWrite(AirPumpPin, LOW);
-                    // Wareten bis sich der Staudruck stabilisiert hat 
+                    // Warten bis sich der Staudruck stabilisiert hat 
                     delay(500);
                 }
             }
             char temp[6] = "Ai";
             char tempindex[3];
             char wert[7];
+            static uint16_t oldADC[usedAnalog];
             itoa(pinMapping[i], tempindex, 10);
             strncat(temp, tempindex, 2);
             uint16_t adcValue;
             adcValue = analogRead(pinMapping[i]);
-            if (config[i] & (1<<readPlant)){
-                
-            }else if (config[i] & (1<<readLDR)){
-                // GND----[_10K_]--+--LDR----VDD 
-                //                 |________ADin
-                //Wir muessen nichts berechnen
-                
-            }else if (config[i] & (1<<readRaw)){
-                //Wir muessen nichts berechnen
-            }else if ((config[i] & (1<<readVolt)) || (config[i] & (1<<readFuelHigh))){
-                uint16_t Vref = read_Vcc(false);
-                float voltPerCount = Vref / 1023.0;
-                voltPerCount *= adcValue;                
-                adcValue = voltPerCount;
+            //Wir pruefen ob sich der der Wert um mehr als ca 5 prozent verändert hat
+            uint16_t minVal;
+            //underflow verhindern
+            if (oldADC[i-offsetAnalogConfig] >= adcHysterese){
+                minVal = oldADC[i-offsetAnalogConfig] - adcHysterese;
+            }else{
+                minVal = oldADC[i-offsetAnalogConfig];
             }
-            if (config[i] & (1<<readFuelHigh)){
-                // Wir rechnen mit der Spannung weiter 
-                // Vsupply = 5V
-                // 10% von Vsupply = 0 psi
-                // 90% von Vsupply = 5 psi 
-                // 1psi = 68,9mbar = 70,31cm
-                // 2psi = 137,89mbar = 140,6cm
-                // 3psi = 206mbar = 210.9cm
-                float fuellstand;
-                int16_t adcValue2;
-                adcValue2 = adcValue - 500; // -500mV
-                if (adcValue2 < 0){
-                    adcValue2 = 0;
+            if ((adcValue > (oldADC[i-offsetAnalogConfig] + adcHysterese)) || (adcValue < minVal) || check){
+
+                oldADC[i-offsetAnalogConfig] = adcValue;
+
+                if (config[i] & (1<<readPlant)){
+                    
+                }else if (config[i] & (1<<readLDR)){
+                    // GND----[_10K_]--+--LDR----VDD 
+                    //                 |________ADin
+                    //Wir muessen nichts berechnen
+                    
+                }else if (config[i] & (1<<readRaw)){
+                    //Wir muessen nichts berechnen
+                }else if ((config[i] & (1<<readVolt)) || (config[i] & (1<<readFuelHigh))){
+                    uint16_t Vref = read_Vcc(false);
+                    float voltPerCount = Vref / 1023.0;
+                    voltPerCount *= adcValue;                
+                    adcValue = voltPerCount;
                 }
-                adcValue2 *= 3;          //11.378 == 4000mV / 5psi / 70,31cm
-                adcValue2 /= 34;
-                // Messung 1 103cm messwert 100
-                // Messung 2 200cm messwert 198
-                //fuellstand = adcValue / 11.378; // 4000mV / 5psi / 70,31cm
-                //adcValue = fuellstand;
-                adcValue = adcValue2;
+                if (config[i] & (1<<readFuelHigh)){
+                    // Wir rechnen mit der Spannung weiter 
+                    // Vsupply = 5V
+                    // 10% von Vsupply = 0 psi
+                    // 90% von Vsupply = 5 psi 
+                    // 1psi = 68,9mbar = 70,31cm
+                    // 2psi = 137,89mbar = 140,6cm
+                    // 3psi = 206mbar = 210.9cm
+                    float fuellstand;
+                    int16_t adcValue2;
+                    adcValue2 = adcValue - 500; // -500mV
+                    if (adcValue2 < 0){
+                        adcValue2 = 0;
+                    }
+                    adcValue2 *= 3;          //11.378 == 4000mV / 5psi / 70,31cm
+                    adcValue2 /= 34;
+                    // Messung 1 103cm messwert 100
+                    // Messung 2 200cm messwert 198
+                    //fuellstand = adcValue / 11.378; // 4000mV / 5psi / 70,31cm
+                    //adcValue = fuellstand;
+                    adcValue = adcValue2;
+                }
+                if (config[i] & (1<<multi2)){
+                    adcValue *= 2;
+                }
+                if (config[i] & (1<<multi4)){
+                    adcValue *= 4;
+                }
+                itoa(adcValue,wert,10);
+                write_buffer_str(temp,wert);
             }
-            if (config[i] & (1<<multi2)){
-                adcValue *= 2;
-            }
-            if (config[i] & (1<<multi4)){
-                adcValue *= 4;
-            }
-            itoa(adcValue,wert,10);
-            write_buffer_str(temp,wert);
         }   
     }
 }
@@ -1688,9 +1705,13 @@ void loop()
         if (config[digitalSensors] & (1<<readBME)){
             read_bme();
         }
-        read_analog();
+        read_analog(true);
         read_counters();
         //sende aktuellen Status der Ports
+        //Wir wollen die Ports zyklisch senden wenn auch die anderen Sensoren gelesen werden
+        read_inputs(sensorenLesen && (!InputAlredyRead));
+        //commit vom 4.11.17
+        //wir lesen den Port hier nur wenn er nicht von einem interrupt behandelt wurde
         read_inputs(!InputAlredyRead);
         InputAlredyRead = false;
         sensorenLesen = false;
@@ -1698,6 +1719,7 @@ void loop()
     
     //Lesen der digitalen Inputs
     read_inputs();
+    read_analog(false);
     
     //Watchdog
     timepassed = millis() - watchdogTimeOld;
