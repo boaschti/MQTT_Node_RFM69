@@ -32,6 +32,17 @@ Modifications Needed:
 */
 
 
+//Board defines  --------------------------------------------------------------------------------------------------
+//#define ArduinoSPSNode
+
+
+#ifdef ArduinoSPSNode
+  #define RF69_SPI_CS          5
+#else 
+  #define RF69_SPI_CS          8
+#endif
+  
+
 //Basic Defines  --------------------------------------------------------------------------------------------------
 #include <RFM69.h>
 #include <SPI.h>
@@ -40,7 +51,6 @@ Modifications Needed:
 #include <RFM69registers.h>
 #include <avr/power.h>
 
-//#define ArduinoSPSNode
 
 //Standardkonfig wird uebernommen wenn JP_2 == GND oder funktion_pin0 == 255 (Komando "w_0":"255")
 #define DEFAULTNODEID        254                    //nur einmal im Netzwerk vorhanden
@@ -740,7 +750,7 @@ void setup()
     unsigned long timepassed;
     timepassed = millis() - sendTimeOld;
     
-    if (timepassed >= 10000){
+    if (timepassed >= 2000){
       sendTimeOld = millis();
       SendAlowed = true;
     }
@@ -753,21 +763,24 @@ void setup()
         if (SendAlowed){
             if (((nameLength + wertLength + sendBufferPointer + messageOverhead + lengthMessageEndChar) > RF69_MAX_DATA_LEN) || ((wertLength == 0) && (sendBufferPointer > 0))){
                 sendBuffer[sendBufferPointer] = '\}';
-                if (!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer + lengthMessageEndChar)){
-                    //Wir konnten nicht senden-> wir warten und probieren es noch einmal
-                    delay(config[nodeId]*1.3);
-                    if (!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer + lengthMessageEndChar)){
-                        //Ein Fehler ist aufgetreten wir merken uns den Bufferinhalt
-                        //radio_Rx_loop(); //RFM->RXMode
-                        //Wir verbieten das Senden und merken uns den Zeitstempel damit diese Node nicht sofort wieder senden will und die Frequenz blokiert
-                        sendTimeOld = millis();
-                        SendAlowed = false;
-                        return false;
+                // pruefen ob der Kanal frei ist
+                if (rfm69.readRSSI() < CSMA_LIMIT){
+                    if (!rfm69.sendWithRetry(config[gatewayId], sendBuffer, sendBufferPointer + lengthMessageEndChar, 2, 100)){
+                            //Ein Fehler ist aufgetreten wir merken uns den Bufferinhalt
+                            //Wir verbieten das Senden und merken uns den Zeitstempel damit diese Node nicht sofort wieder senden will und die Frequenz blokiert
+                            sendTimeOld = millis();
+                            SendAlowed = false;
+                            //Wir setzen das RFM sofort wieder in den RX Mode es sollten und dürfen hier keine Daten im Buffer sein
+                            rfm69.receiveDone();
+                            return false;
                     }else{
                         sendBufferPointer = 0;
                     }
+                    //Wir setzen das RFM sofort wieder in den RX Mode es sollten und dürfen hier keine Daten im Buffer sein
+                    rfm69.receiveDone();
                 }else{
-                    sendBufferPointer = 0;
+                    //Es sendet gerade jemand wir koennen nicht senden es wird schief gehen
+                    return false;
                 }
             }
         // es gib den Fall dass die Funktion mit einer wertlenth == 0 aufgerufen wird in diesem Fall wollen wir nur senden 
@@ -827,11 +840,9 @@ void setup()
         if (SendAlowed){
             rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
         }
-        //radio_Rx_loop(); //RFM->RXMode
         return false;
     }
     
-    //radio_Rx_loop(); //RFM->RXMode
     return true;
 }
 
@@ -1571,7 +1582,7 @@ void go_sleep(boolean shortSleep = false){
 boolean read_inputs(boolean readAll = false){
     static boolean readAllInputs = true;
     readAllInputs |= readAll;
-    static uint8_t lastPinState = 0;
+    static uint16_t lastPinState = 0;
     
     //#define bit_write(p,m,c) (c ? bit_set(p,m) : bit_clear(p,m))
 
@@ -1667,6 +1678,7 @@ void loop()
     static long sensorTimeOld;
     static long watchdogTimeOld;
     static long pumpTimeOld;
+    static long sendTimeOld;
     static boolean sensorenLesen = true;
     static boolean wdSenden = false;
     static boolean gotoldmsg = false;
@@ -1726,18 +1738,20 @@ void loop()
     timepassed = millis() - watchdogTimeOld;
     if (((timepassed > WatchdogPeriod) || (wdSenden == true)) && (WatchdogPeriod > 0)){
         watchdogTimeOld = millis();
-        write_buffer_str("wd", "WD_MSG",true);
+        write_buffer_str("wd", "WD_MSG", true);
     }
 
     //Zum leeren des Buffers und senden aller Daten
-    //if (rfm69.readRSSI() < CSMA_LIMIT){
+    timepassed = millis() - sendTimeOld;    
+    if (timepassed > (1000 + config[nodeId])){
+        sendTimeOld = millis();
         write_buffer_str("","");
-    //}
+    }
 
     timepassed = millis() - WdTrigTimeStamp;
     if (timepassed > WdPinTimeout){
         if (!wdMsgSend){
-          write_buffer_str("info","wd expiered");
+          write_buffer_str("info","wd expiered", true);
           wdMsgSend = true;
         }
         reset_wdPins();
@@ -1804,8 +1818,6 @@ void loop()
         radio_Rx_loop();
     }
 
-    //Zum leeren des Buffers und senden aller Daten
-    //write_buffer_str("","");
     if (config[nodeControll] & (1<<debugLed)){
         digitalWrite(LedPinMapping[2], HIGH);
     }
