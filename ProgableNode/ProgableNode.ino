@@ -4,31 +4,6 @@ Date 28.01.2017
 Modifications Needed:
 1)  Update encryption string "ENCRYPTKEY"
 2)  Frequency setting
-3)	Add Programmer ..\Arduino\hardware\arduino\avr\programmers.txt 
-4)	..\Users\..\Documents\Arduino\libraries\Adafruit_BME280_Library\Adafruit_BME280.cpp replace "if (read8(BME280_REGISTER_CHIPID) != 0x60)" with "uint8_t chipId = read8(BME280_REGISTER_CHIPID); if ((chipId != 0x58) && (chipId != 0x60))"
-5)	RFM69.h replace   #define RF69_IRQ_PIN          3    #define RF69_IRQ_NUM          1
-6)  Add special board defines to ..\Arduino\hardware\arduino\avr\boards.txt
-7)  Add: 
-        void Adafruit_BME280::sleepMode(void){
-          uint8_t oldBME280_REGISTER_CONTROL = read8(BME280_REGISTER_CONTROL);
-          oldBME280_REGISTER_CONTROL &= ~((1<<0) | (1<<1));
-          write8(BME280_REGISTER_CONTROL, oldBME280_REGISTER_CONTROL);
-        }
-
-        void Adafruit_BME280::normalMode(void){
-          uint8_t oldBME280_REGISTER_CONTROL = read8(BME280_REGISTER_CONTROL);
-          oldBME280_REGISTER_CONTROL |= (1<<0) | (1<<1);
-          write8(BME280_REGISTER_CONTROL, oldBME280_REGISTER_CONTROL);
-        }
-
-    to ...\Documents\Arduino\libraries\Adafruit_BME280_Library\Adafruit_BME280.cpp
-8)  Add 
-        void  sleepMode(void);
-        void  normalMode(void);
-    to ...\Documents\Arduino\libraries\Adafruit_BME280_Library\Adafruit_BME280.h
-
-
-
 */
 
 
@@ -44,11 +19,11 @@ Modifications Needed:
   
 
 //Basic Defines  --------------------------------------------------------------------------------------------------
-#include <RFM69.h>
+#include "RFM69.h"
 #include <SPI.h>
 #include <avr/sleep.h>
 #include <avr/wdt.h> 
-#include <RFM69registers.h>
+#include "RFM69registers.h"
 #include <avr/power.h>
 
 
@@ -88,7 +63,7 @@ RFM69 rfm69;
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <Adafruit_Sensor.h>
-#include <Adafruit_BME280.h>
+#include "Adafruit_BME280.h"
 #include <U8x8lib.h>
 
 #define F_CPU 4000000UL
