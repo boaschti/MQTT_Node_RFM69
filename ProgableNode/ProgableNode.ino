@@ -83,7 +83,8 @@ U8X8_SSD1306_128X64_NONAME_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE);
     
 //Pins zum versorgen der Sensoren
     #define pumpPin			5
-    #define supplyPin		6
+    //#define supplyPin		6
+    #define supplyPin		17 //AD3
     
 //Pins zum bedienen des Heiz Thermostat Stellrades
     #define signalA         0
@@ -555,18 +556,19 @@ void setupDefaultPins(void){
 
 void disableWd(void){
     //Reset WD Timer
-    wdt_disable();
+    //wdt_disable();
     
-    //MCUSR &= ~(1<<WDRF);
-    //WDTCSR |= (1<<WDCE) | (1<<WDE);
-    //WDTCSR = 0;
+    // Folgendes hat zuverlaessig funktioniert
+    MCUSR &= ~(1<<WDRF);
+    WDTCSR |= (1<<WDCE) | (1<<WDE);
+    WDTCSR = 0;
 }
 
 void setup()
 {	
     //disable Watchdog Timer
     disableWd();
-
+    
     initVariables();
     check_improveConfig();
 
@@ -1038,6 +1040,7 @@ boolean readMessage(char *message){
         write_buffer_str("state", "restart_Node_wait_8s");
         //write_buffer_str("","");
         wdt_reset();
+        
         wdt_enable(WDTO_8S);
     }
 }
