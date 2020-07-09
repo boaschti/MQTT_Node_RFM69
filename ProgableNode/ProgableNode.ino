@@ -26,6 +26,8 @@ Modifications Needed:
 #include "RFM69registers.h"
 #include <avr/power.h>
 
+#define Commit "606a6501f4b0935ae522b334c9122c1fda6fe653"
+
 
 //Standardkonfig wird uebernommen wenn JP_2 == GND oder funktion_pin0 == 255 (Komando "w_0":"255")
 #define DEFAULTNODEID        254                    //nur einmal im Netzwerk vorhanden
@@ -675,9 +677,13 @@ void setup()
     //reset oscal error damit der oscal beim nächten MAl wieder ausgeführt wird
     eeprom_write_byte(&eeConfig[oscCalError], 0);
 
-    if (printOK && SendAlowed){
-        const char errorString[] = "\"state\":\"Ok\"";
-        rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
+    if (SendAlowed){
+        const char commitstr[] = "\"FirmwareCommit\":\"" Commit "\"";
+        rfm69.sendWithRetry(config[gatewayId], commitstr, sizeof(commitstr));        
+        if (printOK){
+            const char errorString[] = "\"state\":\"Ok\"";
+            rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
+        }
     }
     
     #ifndef ArduinoSPSNode
