@@ -1201,7 +1201,9 @@ void read_analog(boolean check = true){
         if (config[i] != 0){
             if (config[i] & (1<<readFuelHigh)){
                 static uint8_t PumpCounter = 1;
-                PumpCounter--;
+                if (check){
+                    PumpCounter--;
+                }
                 if ((PumpCounter == 0)){
                     PumpCounter = PumpXtimes;
                     pinMode(AirPumpPin, OUTPUT);
