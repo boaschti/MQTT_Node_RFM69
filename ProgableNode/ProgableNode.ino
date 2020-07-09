@@ -473,7 +473,7 @@ void initVariables(void)
         eeprom_write_byte(&eeConfig[nodeId], DEFAULTNODEID);
         eeprom_write_byte(&eeConfig[networkId], DEFAULTNETWORKID);
         eeprom_write_byte(&eeConfig[gatewayId], DEFAULTGATEWAYID);
-        eeprom_write_byte(&eeConfig[sensorDelay], 2);
+        eeprom_write_byte(&eeConfig[sensorDelay], 21);
         eeprom_write_byte(&eeConfig[firstEEPromInit], 0xAF);
         eeprom_write_byte(&eeConfig[oscCalError], 0);
         eeprom_write_block(DEFAULTENCRYPTKEY,  &eeEncryptKey, 16+1);
@@ -534,7 +534,8 @@ void setupPins(void)
     
     //Der supplyPin ist zum versorgen der Sensoren gedacht
     if (config[nodeControll] & (1<<sensorPower)){
-        digitalWrite(supplyPin, HIGH);
+        pinMode(supplyPin, OUTPUT);
+        digitalWrite(supplyPin, LOW);
     }    
 
     if (config[digitalSensors] & (1<<readHC05)){
@@ -1441,7 +1442,7 @@ void go_sleep(boolean shortSleep = false){
     }
     
     if (!(config[nodeControll] & (1<<sensorPowerSleep))){
-        digitalWrite(supplyPin, LOW);
+        digitalWrite(supplyPin, HIGH);
     }
     
     
@@ -1487,9 +1488,9 @@ void go_sleep(boolean shortSleep = false){
     for (uint16_t i = iInit; i < destSleepTime; i++){
         //Wenn der Sensor versorgt werden soll und die Spannung erhöht werden soll
         if ((config[nodeControll] & (1<<pumpSensorVoltage)) && (config[nodeControll] & (1<<sensorPowerSleep))){
-            digitalWrite(supplyPin, HIGH);
-            pump_Sensor_Voltage();
             digitalWrite(supplyPin, LOW);
+            pump_Sensor_Voltage();
+            digitalWrite(supplyPin, HIGH);
         }
 
         set_sleep_mode(SLEEP_MODE_PWR_DOWN);   // sleep mode is set here	    
@@ -1542,7 +1543,7 @@ void go_sleep(boolean shortSleep = false){
   
     //Wenn der Sensor während des Sleeps nicht versorgt wurde schalten wir ihn hier wieder ein
     if (config[nodeControll] & (1<<sensorPower)){
-        digitalWrite(supplyPin, HIGH);
+        digitalWrite(supplyPin, LOW);
     }    
     
     //rfm69.receiveDone();	//set RFM to RX
@@ -1654,10 +1655,10 @@ void loop()
 {  
     unsigned long timepassed;
 
-    static long sensorTimeOld;
-    static long watchdogTimeOld;
-    static long pumpTimeOld;
-    static long sendTimeOld;
+    static unsigned long sensorTimeOld;
+    static unsigned long watchdogTimeOld;
+    static unsigned long pumpTimeOld;
+    static unsigned long sendTimeOld;
     static boolean sensorenLesen = true;
     static boolean wdSenden = false;
     static boolean gotoldmsg = false;
