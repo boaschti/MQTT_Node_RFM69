@@ -68,7 +68,9 @@ RFM69 rfm69;
 #include "Adafruit_BME280.h"
 #include <U8x8lib.h>
 
-#define F_CPU 4000000UL
+#ifndef ArduinoSPSNode
+  #define F_CPU 4000000UL
+#endif
 
 
 //U8X8_SSD1306_64X48_ER_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE);  
@@ -194,7 +196,7 @@ uint8_t eeEncryptKey[16+1] EEMEM;
 #define displayLongOn       7       //Das Display wird 40 sec nach dem Einschlafen aktiv gehalten
 
 //Einstellen von Verhalten aufgrund externer Hardware
-#define extCrystal          0       //Wenn ein externer Quarz verbaut ist
+#define extCrystal          0       //Wenn ein externer Quarz verbaut ist Fuse: L 0xFF H 0xD1 E 0xFF Wichtig: Leiterbahn zum RFM Unterbrechen damit osc eingang frei schwingen kann
 
 //Die folgenden Definitionen zeigen die Stelle im BYTE Array wo die Einstellungen gespeichert sind:
 //Man kann direkt auf das ARRAY per Funk zugreifen die Werte sind immer dezimal:
@@ -504,6 +506,8 @@ void initVariables(void)
     // Wenn die node neu ist wird sie vom Gateway nicht empfangen
     if ((config[networkId] == DEFAULTNETWORKID) && (config[nodeId] == DEFAULTNODEID)){
         SendAlowed = false;
+        // Wir führen den OSCCAL auch nicht durch
+        eeprom_write_byte(&eeConfig[oscCalError], 1);
     }
     
 }
@@ -537,7 +541,7 @@ void setupPins(void)
     //Der supplyPin ist zum versorgen der Sensoren gedacht
     if (config[nodeControll] & (1<<sensorPower)){
         pinMode(supplyPin, OUTPUT);
-        digitalWrite(supplyPin, LOW);
+        digitalWrite(supplyPin, HIGH);
     }    
 
     if (config[digitalSensors] & (1<<readHC05)){
@@ -567,10 +571,25 @@ void disableWd(void){
     WDTCSR = 0;
 }
 
+void blinkStatus(uint8_t blinkCount){
+    for (uint8_t i = 0; i<blinkCount; i++){
+        digitalWrite(LedPinMapping[2], LOW);
+        delay(100);
+        digitalWrite(LedPinMapping[2], HIGH);
+        delay(100);
+    }
+    #ifdef ArduinoSPSNode
+    digitalWrite(LedPinMapping[2], LOW);
+    #endif
+    delay(1000);
+}
+
 void setup()
 {	
     //disable Watchdog Timer
     disableWd();
+    
+    blinkStatus(1);
     
     initVariables();
     check_improveConfig();
@@ -591,16 +610,11 @@ void setup()
     digitalWrite(ResetRfmPin, LOW);
     delay(10);
     //Init RFM69
-
+    
     if (!rfm69.initialize(FREQUENCY, config[nodeId], config[networkId])){
-        for (uint8_t i = 0; i<20; i++){
-              digitalWrite(LedPinMapping[2], LOW);
-              delay(100);
-              digitalWrite(LedPinMapping[2], HIGH);
-              delay(100);
-        }
+        blinkStatus(30);
     }
-
+    
     //rfm69.initialize(FREQUENCY,NODEID,NETWORKID);
     #ifdef IS_RFM69HW
         rfm69.setHighPower(); 
@@ -612,7 +626,7 @@ void setup()
     //rfm69.encrypt(DEFAULTENCRYPTKEY);
 
     rfm69.receiveDone();		//goto Rx Mode
-  
+    
     //--------------------------------------
 
     //Spezial Pin Einstellungen laden
@@ -641,14 +655,18 @@ void setup()
     #ifndef ArduinoSPSNode
       if (!(config[chipSetup] & (1<<extCrystal))){
           if (!(eeprom_read_byte(&eeConfig[oscCalError]))){
-              eeprom_write_byte(&eeConfig[oscCalError], 1);
-              wdt_enable(WDTO_8S);
-              if (!oscCalibration() && SendAlowed) {
-                  const char errorString[] = "\"state\":\"oscCal\"";
+            eeprom_write_byte(&eeConfig[oscCalError], 1);
+            if (SendAlowed) {
+                const char errorString[] = "\"state\":\"oscCal\"";
+                rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
+            }            
+            wdt_enable(WDTO_8S);
+            if (!oscCalibration() && SendAlowed) {
+                const char errorString[] = "\"state\":\"oscCal_error\"";
                   rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
               }
-              eeprom_write_byte(&eeConfig[oscCalError], 0);
               disableWd();
+              eeprom_write_byte(&eeConfig[oscCalError], 0);
           }else if (SendAlowed){
               printOK = 0;
               const char errorString[] = "\"state\":\"oscCal_skiped\"";
@@ -679,7 +697,11 @@ void setup()
 
     if (SendAlowed){
         const char commitstr[] = "\"FirmwareCommit\":\"" Commit "\"";
-        rfm69.sendWithRetry(config[gatewayId], commitstr, sizeof(commitstr));        
+        if (rfm69.sendWithRetry(config[gatewayId], commitstr, sizeof(commitstr))){
+            blinkStatus(1);
+        }else{
+            blinkStatus(10);
+        }        
         if (printOK){
             const char errorString[] = "\"state\":\"Ok\"";
             rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
@@ -1450,7 +1472,7 @@ void go_sleep(boolean shortSleep = false){
     }
     
     if (!(config[nodeControll] & (1<<sensorPowerSleep))){
-        digitalWrite(supplyPin, HIGH);
+        digitalWrite(supplyPin, LOW);
     }
     
     
@@ -1496,9 +1518,9 @@ void go_sleep(boolean shortSleep = false){
     for (uint16_t i = iInit; i < destSleepTime; i++){
         //Wenn der Sensor versorgt werden soll und die Spannung erhöht werden soll
         if ((config[nodeControll] & (1<<pumpSensorVoltage)) && (config[nodeControll] & (1<<sensorPowerSleep))){
-            digitalWrite(supplyPin, LOW);
-            pump_Sensor_Voltage();
             digitalWrite(supplyPin, HIGH);
+            pump_Sensor_Voltage();
+            digitalWrite(supplyPin, LOW);
         }
 
         set_sleep_mode(SLEEP_MODE_PWR_DOWN);   // sleep mode is set here	    
@@ -1527,7 +1549,7 @@ void go_sleep(boolean shortSleep = false){
         // eben nicht verlassen wird. In diesem Fall wird nicht gesendet. Beim nächsten Mal könnte das gut gehen und man bekommt
         // die alten und neuen Daten geschickt.        
         if (config[digitalSensors] & (1<<debounceLong)){
-            delay(50);
+            delay(30);
         }
 
 
@@ -1545,13 +1567,19 @@ void go_sleep(boolean shortSleep = false){
     ADCSRA = oldADCSRA;
     SendAlowed = true;
     
+    #ifndef ArduinoSPSNode
+      digitalWrite(LedPinMapping[2], HIGH);
+      delay(5);
+      digitalWrite(LedPinMapping[2], LOW);
+    #endif
+
     if (config[digitalSensors] & (1<<readBME)){
         bme.normalMode();
     }
   
     //Wenn der Sensor während des Sleeps nicht versorgt wurde schalten wir ihn hier wieder ein
     if (config[nodeControll] & (1<<sensorPower)){
-        digitalWrite(supplyPin, LOW);
+        digitalWrite(supplyPin, HIGH);
     }    
     
     //rfm69.receiveDone();	//set RFM to RX

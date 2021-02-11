@@ -364,7 +364,11 @@ void RFM69::interruptHandler() {
 }
 
 // internal function
+#if defined(ESP8266)
+ICACHE_RAM_ATTR void RFM69::isr0() { _inISR = true; selfPointer->interruptHandler(); _inISR = false; }
+#else
 void RFM69::isr0() { _inISR = true; selfPointer->interruptHandler(); _inISR = false; }
+#endif
 
 // internal function
 void RFM69::receiveBegin() {

@@ -3,8 +3,10 @@
 This project is a multisensor node based on a Atmega328 and RFM69 radio. The Sensor is a ultraLowPower(0.1uA) device supplied from 1.8V to 3.6V.
  
 You can connect the node with the [Gateway](https://github.com/boaschti/MQTT_WLan_RFM69_Gateway) via MQTT to your home automation.
-Just download .hex and flash it with avr studio. Fuses are: low_fuses=0xd2 high_fuses=0xd1 extended_fuses=0xfe (extended_fuses=0xff = BrownOut off = UltraLowPower)
- 
+Just download .hex and flash it with avr studio. 
+Fuses for use without ext crystal are: low_fuses=0xd2 high_fuses=0xd1 extended_fuses=0xfe (extended_fuses=0xff = BrownOut off = UltraLowPower)
+Fuses for use with ext crystal are: low_fuses=0xff high_fuses=0xd1 extended_fuses=0xfe (extended_fuses=0xff = BrownOut off = UltraLowPower). And cut the cooper between RFM and crystal inputs (atmega).
+
 ### Board
 The board has
 - 7 GPIOs including 4 analog inputs
