@@ -8,7 +8,8 @@ Modifications Needed:
 
 
 //Board defines  --------------------------------------------------------------------------------------------------
-//#define ArduinoSPSNode
+#define ArduinoSPSNode
+//#define InternalOszilator
 
 
 #ifdef ArduinoSPSNode
@@ -26,7 +27,7 @@ Modifications Needed:
 #include "RFM69registers.h"
 #include <avr/power.h>
 
-#define Commit "606a6501f4b0935ae522b334c9122c1fda6fe653"
+#define Commit "cc971da"
 
 
 //Standardkonfig wird uebernommen wenn JP_2 == GND oder funktion_pin0 == 255 (Komando "w_0":"255")
@@ -69,6 +70,10 @@ RFM69 rfm69;
 #include <U8x8lib.h>
 
 #ifndef ArduinoSPSNode
+  #define InternalOszilator
+#endif
+
+#ifdef InternalOszilator
   #define F_CPU 4000000UL
 #endif
 
@@ -162,8 +167,8 @@ uint8_t eeEncryptKey[16+1] EEMEM;
 #define readFuelHigh    2           //Honewell ABPDANT005PGAA5 Staudruck wasser umgerechnet in cm
 #define readRaw         3           //raw adc Wert
 #define readVolt        4           //reads voltage of a ADC
-#define multi2         6            //multiply ADC / 2 
-#define multi4         7            //multiply ADC / 4 
+#define multi2         5            //multiply ADC / 2 
+#define multi4         6            //multiply ADC / 4 
 
 //Zum konfigurieren der digitalen Sensoren muss man nur angeben welche Sensoren gelesen werden sollen.
 //Bits der Variable digitalsensors
@@ -219,6 +224,7 @@ uint8_t eeEncryptKey[16+1] EEMEM;
 #define  math_analog3           11
 #define  math_analog4           12
 #define  math_analog5           13
+
 #define  digitalSensors         15
 #define  digitalOut             16
 
@@ -253,7 +259,6 @@ uint8_t eeEncryptKey[16+1] EEMEM;
   #define offsetAnalogConfig      9      //offset der analogen konfig
   const uint8_t pinMapping[15]{15,16,17,18,19,6,7,8,9,1,2,3,4,5,6};
   //der SSPin macht noch Probleme Spi funktioniert dann nicht mehr!
-  //const uint8_t pinMapping[15]{0,1,17,18,19,9,10,0,0,0,3,4,5,0,0};
   unsigned long counter[usedDio];
   const uint8_t LedPinMapping[3]{0,0,0};
 #endif
@@ -294,7 +299,7 @@ void pciDisable(byte pin)
     *digitalPinToPCMSK(pin) &= ~bit (digitalPinToPCMSKbit(pin));  // disable pin
 }
 
-#ifndef ArduinoSPSNode
+#ifdef InternalOszilator
 boolean oscCalibration(void){
     
     //Timer1 laufen lassen
@@ -444,7 +449,7 @@ boolean oscCalibration(void){
 
 
 }
-#endif // ArduinoSPSNode
+#endif // InternalOszilator
 
 
 boolean getJumper(void){
@@ -466,7 +471,7 @@ void initVariables(void)
     //Standard config laden
     //Alle Pins auf Eingang
     //keine Sensoren aktiv
-    //es kann bei der ersten Inbetriebnahme zu Problemen (haengt beim Sensor lesen) kommen wenn diese Variable nicht auf 255 steht
+    //es kann bei der ersten Inbetriebnahme zu Problemen (haengt beim Sensor lesen) kommen wenn eeConfig[0] Variable nicht auf 255 steht. eeConfig[0] ist zum reseten der node gedacht (doppelfunktion)
     
     if ((eeprom_read_byte(&eeConfig[0]) == 255) || (eeprom_read_byte(&eeConfig[firstEEPromInit]) != 0xAF) || getJumper()){
     //if (1){
@@ -506,8 +511,12 @@ void initVariables(void)
     // Wenn die node neu ist wird sie vom Gateway nicht empfangen
     if ((config[networkId] == DEFAULTNETWORKID) && (config[nodeId] == DEFAULTNODEID)){
         SendAlowed = false;
-        // Wir führen den OSCCAL auch nicht durch
-        eeprom_write_byte(&eeConfig[oscCalError], 1);
+        #ifdef InternalOszilator
+            // Wir führen den OSCCAL auch nicht durch
+            eeprom_write_byte(&eeConfig[oscCalError], 1);
+        #endif
+    }else{
+        SendAlowed = true;
     }
     
 }
@@ -652,7 +661,7 @@ void setup()
     }
     
     uint8_t printOK = 1;
-    #ifndef ArduinoSPSNode
+    #ifdef InternalOszilator
       if (!(config[chipSetup] & (1<<extCrystal))){
           if (!(eeprom_read_byte(&eeConfig[oscCalError]))){
             eeprom_write_byte(&eeConfig[oscCalError], 1);
@@ -662,22 +671,24 @@ void setup()
             }            
             wdt_enable(WDTO_8S);
             if (!oscCalibration() && SendAlowed) {
+                disableWd();
                 const char errorString[] = "\"state\":\"oscCal_error\"";
-                  rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
-              }
-              disableWd();
-              eeprom_write_byte(&eeConfig[oscCalError], 0);
+                rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
+            }
+            disableWd();
           }else if (SendAlowed){
               printOK = 0;
-              const char errorString[] = "\"state\":\"oscCal_skiped\"";
+              const char errorString[] = "\"state\":\"oscCal_skiped_eeprom\"";
               rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
           }
       }else if (SendAlowed){
           printOK = 0;
-          const char errorString[] = "\"info\":\"oscCal_skiped\"";
+          const char errorString[] = "\"info\":\"oscCal_skiped_extcrystal\"";
           rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
       }
-    #endif
+      //reset oscal error damit der oscal beim nächten MAl wieder ausgeführt wird
+      eeprom_write_byte(&eeConfig[oscCalError], 0);
+    #endif //InternalOszilator
     
     //device UART
     if (config[digitalOut] & (1<<uart)){
@@ -691,9 +702,6 @@ void setup()
             rfm69.sendWithRetry(config[gatewayId], errorString, sizeof(errorString));
         }
     }
-        
-    //reset oscal error damit der oscal beim nächten MAl wieder ausgeführt wird
-    eeprom_write_byte(&eeConfig[oscCalError], 0);
 
     if (SendAlowed){
         const char commitstr[] = "\"FirmwareCommit\":\"" Commit "\"";
@@ -756,7 +764,7 @@ void setup()
     unsigned long timepassed;
     timepassed = millis() - sendTimeOld;
     
-    if (timepassed >= 2000){
+    if (timepassed >= 20000){
       sendTimeOld = millis();
       SendAlowed = true;
     }
@@ -1759,7 +1767,7 @@ void loop()
 
     //Zum leeren des Buffers und senden aller Daten
     timepassed = millis() - sendTimeOld;    
-    if (timepassed > (1000 + config[nodeId])){
+    if (timepassed > (400 + (5 * config[nodeId]))){
         sendTimeOld = millis();
         write_buffer_str("","");
     }
